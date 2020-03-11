@@ -28,7 +28,7 @@ The Bela software is distributed under the GNU Lesser General Public License
 
 
 
-./scripts/build_project.sh ./examples/Sensors/pumpkin/ --force
+./scripts/build_project.sh ./projects/pumpkin/ --force
 
 ./scripts/halt_board.sh 
 
