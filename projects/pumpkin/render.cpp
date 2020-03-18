@@ -1,15 +1,16 @@
 #include <Bela.h>
-#include <libraries/Oscillator/Oscillator.h>
 #include <libraries/ADSR/ADSR.h>
+#include <libraries/Oscillator/Oscillator.h>
 
 #include <cmath>
 #include "I2C_MPR121.h"
+#include "OscillatorHarmonics.h"
 
 // How many pins there are
 #define NUM_TOUCH_PINS 12
 
 // Prevent clipping
-float volume = 0.1;
+float volume = 0.5;
 
 // Change this to change how often the MPR121 is read (in Hz)
 int readInterval = 50;
@@ -24,13 +25,13 @@ int sensorValue[NUM_TOUCH_PINS];
 float gFrequencies[NUM_TOUCH_PINS] = {261.63, 293.66, 329.63, 349.23,
                                       392.00, 440.00, 493.88, 523.25,
                                       587.33, 659.25, 698.25, 783.99};
-Oscillator oscillators[NUM_TOUCH_PINS][3];
+OscillatorHarmonics oscillators[NUM_TOUCH_PINS];
 
-float gAttack = 0.1; // Envelope attack (seconds)
-float gDecay = 0.25; // Envelope decay (seconds)
-float gRelease = 3.5; // Envelope release (seconds)
-float gSustain = 1.0; // Envelope sustain level
-ADSR envelopes[NUM_TOUCH_PINS]; // ADSR envelope
+float gAttack = 0.1;             // Envelope attack (seconds)
+float gDecay = 0.25;             // Envelope decay (seconds)
+float gRelease = 3.5;            // Envelope release (seconds)
+float gSustain = 1.0;            // Envelope sustain level
+ADSR envelopes[NUM_TOUCH_PINS];  // ADSR envelope
 
 I2C_MPR121 mpr121;      // Object to handle MPR121 sensing
 AuxiliaryTask i2cTask;  // Auxiliary task to read I2C
@@ -50,18 +51,17 @@ bool setup(BelaContext *context, void *userData) {
   readIntervalSamples = context->audioSampleRate / readInterval;
 
   for (unsigned int i = 0; i < NUM_TOUCH_PINS; i++) {
-    // adding slightly imperect harmonics
-		oscillators[i][0] = Oscillator{gFrequencies[i],         context->audioSampleRate, Oscillator::osc_type::triangle};
-    oscillators[i][1] = Oscillator{gFrequencies[i] * 2.05f, context->audioSampleRate, Oscillator::osc_type::triangle};
-		oscillators[i][2] = Oscillator{gFrequencies[i] * 3.05f, context->audioSampleRate, Oscillator::osc_type::triangle};
+    oscillators[i] =
+        OscillatorHarmonics{gFrequencies[i], context->audioSampleRate,
+                            Oscillator::osc_type::triangle, 3};
 
     // Set ADSR parameters
     envelopes[i].setAttackRate(gAttack * context->audioSampleRate);
-	  envelopes[i].setDecayRate(gDecay * context->audioSampleRate);
-	  envelopes[i].setReleaseRate(gRelease * context->audioSampleRate);
-	  envelopes[i].setSustainLevel(gSustain);
-	}
-  
+    envelopes[i].setDecayRate(gDecay * context->audioSampleRate);
+    envelopes[i].setReleaseRate(gRelease * context->audioSampleRate);
+    envelopes[i].setSustainLevel(gSustain);
+  }
+
   return true;
 }
 
@@ -78,23 +78,27 @@ void render(BelaContext *context, void *userData) {
     // This code can be replaced with your favourite audio code
     int numPressed = 1;
     for (int i = 0; i < NUM_TOUCH_PINS; i++) {
+      // sensor 4-7 are not connected
+      // and we do not want to skip notes
       if (i >= 4 && i <= 7) continue;
       float amplitude = sensorValue[i] / 400.f;
-     
-      if (amplitude > 0.01 && (envelopes[i].getState() == envState::env_idle || envelopes[i].getState() == envState::env_release)){
-          envelopes[i].gate(true);
+      unsigned int envState = envelopes[i].getState();
+      if (amplitude > 0.01 && (envState == envState::env_idle ||
+                               envState == envState::env_release)) {
+        envelopes[i].gate(true);
 
-      } else if (amplitude < 0.01 && envelopes[i].getState() != envState::env_idle){
-          envelopes[i].gate(false);
+      } else if (amplitude < 0.01 && envState != envState::env_idle) {
+        envelopes[i].gate(false);
       }
-     
-      sample += envelopes[i].process() * volume * (oscillators[i][0].process() + 0.5f* oscillators[i][1].process() + 0.33f * oscillators[i][2].process());
-      if (envelopes[i].getState() != envState::env_idle){
+
+      sample += envelopes[i].process() * oscillators[i].process();
+      if (envState != envState::env_idle) {
         numPressed++;
       }
     }
-    for (unsigned int ch = 0; ch < context->audioInChannels; ch++){
-      context->audioOut[context->audioInChannels * n + ch] = sample * 1/(numPressed);
+    for (unsigned int ch = 0; ch < context->audioInChannels; ch++) {
+      context->audioOut[context->audioInChannels * n + ch] =
+          sample / numPressed;
     }
   }
 }
