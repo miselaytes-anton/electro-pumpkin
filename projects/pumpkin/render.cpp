@@ -3,8 +3,8 @@
 #include <libraries/Oscillator/Oscillator.h>
 
 #include <cmath>
-#include "I2C_MPR121.h"
-#include "OscillatorHarmonics.h"
+#include "I2C_MPR121/I2C_MPR121.h"
+#include "OscillatorHarmonics/OscillatorHarmonics.h"
 
 // How many pins there are
 #define NUM_TOUCH_PINS 12
