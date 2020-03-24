@@ -1,25 +1,15 @@
 #include <Bela.h>
 #include <libraries/ADSR/ADSR.h>
 #include <libraries/Oscillator/Oscillator.h>
-
 #include <cmath>
+
+#include "Biquad/Biquad.h"
 #include "I2C_MPR121/I2C_MPR121.h"
 #include "OscillatorHarmonics/OscillatorHarmonics.h"
 
-// How many pins there are
-#define NUM_TOUCH_PINS 12
+#define NUM_TOUCH_PINS 12  // How many pins there are
 
-// Prevent clipping
-float volume = 0.5;
-
-// Change this to change how often the MPR121 is read (in Hz)
-int readInterval = 50;
-
-// Change this threshold to set the minimum amount of touch
-int threshold = 0;
-
-// This array holds the continuous sensor values
-int sensorValue[NUM_TOUCH_PINS];
+int gAudioFramesPerAnalogFrame = 0;
 
 // 12 notes of a C major scale...
 float gFrequencies[NUM_TOUCH_PINS] = {261.63, 293.66, 329.63, 349.23,
@@ -32,14 +22,30 @@ float gDecay = 0.25;             // Envelope decay (seconds)
 float gRelease = 3.5;            // Envelope release (seconds)
 float gSustain = 1.0;            // Envelope sustain level
 ADSR envelopes[NUM_TOUCH_PINS];  // ADSR envelope
+Biquad lpFilter = Biquad();
+float lpFilterFc = 0;
 
-I2C_MPR121 mpr121;      // Object to handle MPR121 sensing
-AuxiliaryTask i2cTask;  // Auxiliary task to read I2C
-
-int readCount = 0;            // How long until we read again...
-int readIntervalSamples = 0;  // How many samples between reads
-
+/* MPR 121 */
+int readInterval =
+    50;  // Change this to change how often the MPR121 is read (in Hz)
+int threshold = 0;  // Change this threshold to set the minimum amount of touch
+int sensorValue[NUM_TOUCH_PINS];  // This array holds the continuous sensor
+                                  // values
+I2C_MPR121 mpr121;                // Object to handle MPR121 sensing
+AuxiliaryTask i2cTask;            // Auxiliary task to read I2C
+int readCount = 0;                // How long until we read again...
+int readIntervalSamples = 0;      // How many samples between reads
 void readMPR121(void *);
+
+void setEnvelopeGate(ADSR *envelope, float amplitude) {
+  unsigned int envState = envelope->getState();
+  if (amplitude > 0.01 &&
+      (envState == envState::env_idle || envState == envState::env_release)) {
+    envelope->gate(true);
+  } else if (amplitude < 0.01 && envState != envState::env_idle) {
+    envelope->gate(false);
+  }
+}
 
 bool setup(BelaContext *context, void *userData) {
   if (!mpr121.begin(1, 0x5B)) {
@@ -53,7 +59,8 @@ bool setup(BelaContext *context, void *userData) {
   for (unsigned int i = 0; i < NUM_TOUCH_PINS; i++) {
     oscillators[i] =
         OscillatorHarmonics{gFrequencies[i], context->audioSampleRate,
-                            Oscillator::osc_type::triangle, 3};
+                            Oscillator::triangle, 3,
+                            OscillatorHarmonics::uneven};
 
     // Set ADSR parameters
     envelopes[i].setAttackRate(gAttack * context->audioSampleRate);
@@ -61,44 +68,48 @@ bool setup(BelaContext *context, void *userData) {
     envelopes[i].setReleaseRate(gRelease * context->audioSampleRate);
     envelopes[i].setSustainLevel(gSustain);
   }
+  lpFilter.setBiquad(bq_type_lowpass, lpFilterFc / context->audioSampleRate,
+                     0.707, 0);
+
+  if (context->analogFrames) {
+    gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
+  }
 
   return true;
 }
 
 void render(BelaContext *context, void *userData) {
   for (unsigned int n = 0; n < context->audioFrames; n++) {
-    // Keep this code: it schedules the touch sensor readings
+    // schedule touch sensor readings
     if (++readCount >= readIntervalSamples) {
       readCount = 0;
       Bela_scheduleAuxiliaryTask(i2cTask);
     }
+    lpFilterFc = map(analogRead(context, n / gAudioFramesPerAnalogFrame, 0), 0,
+                     0.8, 200, 2500);
+    lpFilter.setFc(lpFilterFc / context->audioSampleRate);
 
     float sample = 0.0;
 
-    // This code can be replaced with your favourite audio code
     int numPressed = 1;
     for (int i = 0; i < NUM_TOUCH_PINS; i++) {
-      // sensor 4-7 are not connected
-      // and we do not want to skip notes
-      if (i >= 4 && i <= 7) continue;
-      float amplitude = sensorValue[i] / 400.f;
-      unsigned int envState = envelopes[i].getState();
-      if (amplitude > 0.01 && (envState == envState::env_idle ||
-                               envState == envState::env_release)) {
-        envelopes[i].gate(true);
-
-      } else if (amplitude < 0.01 && envState != envState::env_idle) {
-        envelopes[i].gate(false);
+      if (i >= 4 && i <= 7) {
+        // sensor 4-7 are not connected, and we do not want to skip
+        // notes
+        continue;
       }
 
-      sample += envelopes[i].process() * oscillators[i].process();
-      if (envState != envState::env_idle) {
+      float amplitude = sensorValue[i] / 400.f;
+      setEnvelopeGate(&envelopes[i], amplitude);
+      if (envelopes[i].getState() != envState::env_idle) {
         numPressed++;
       }
+      sample += envelopes[i].process() * oscillators[i].process();
     }
+    //todo: improve/remove filter as adds noise
+    float out = lpFilter.process(sample / numPressed);
     for (unsigned int ch = 0; ch < context->audioInChannels; ch++) {
-      context->audioOut[context->audioInChannels * n + ch] =
-          sample / numPressed;
+      context->audioOut[context->audioInChannels * n + ch] = out;
     }
   }
 }
