@@ -6,6 +6,7 @@
 #include "Biquad/Biquad.h"
 #include "I2C_MPR121/I2C_MPR121.h"
 #include "OscillatorHarmonics/OscillatorHarmonics.h"
+#include "Freeverb/Freeverb.h"
 
 #define NUM_TOUCH_PINS 12  // How many pins there are
 
@@ -19,11 +20,16 @@ OscillatorHarmonics oscillators[NUM_TOUCH_PINS];
 
 float gAttack = 0.1;             // Envelope attack (seconds)
 float gDecay = 0.25;             // Envelope decay (seconds)
-float gRelease = 3.5;            // Envelope release (seconds)
+float gRelease = 3.0;            // Envelope release (seconds)
 float gSustain = 1.0;            // Envelope sustain level
 ADSR envelopes[NUM_TOUCH_PINS];  // ADSR envelope
 Biquad lpFilter = Biquad();
 float lpFilterFc = 0;
+Oscillator lfo;
+float lfoFreq = 0.5;
+int lfoDepth = 150;
+Freeverb *freeverb;
+float volume = 0.5;
 
 /* MPR 121 */
 int readInterval =
@@ -57,10 +63,9 @@ bool setup(BelaContext *context, void *userData) {
   readIntervalSamples = context->audioSampleRate / readInterval;
 
   for (unsigned int i = 0; i < NUM_TOUCH_PINS; i++) {
-    oscillators[i] =
-        OscillatorHarmonics{gFrequencies[i], context->audioSampleRate,
-                            Oscillator::triangle, 3,
-                            OscillatorHarmonics::uneven};
+    oscillators[i] = OscillatorHarmonics{
+        gFrequencies[i]/2, context->audioSampleRate, Oscillator::triangle, 3,
+        OscillatorHarmonics::uneven};
 
     // Set ADSR parameters
     envelopes[i].setAttackRate(gAttack * context->audioSampleRate);
@@ -68,9 +73,12 @@ bool setup(BelaContext *context, void *userData) {
     envelopes[i].setReleaseRate(gRelease * context->audioSampleRate);
     envelopes[i].setSustainLevel(gSustain);
   }
+  lfo.setup(lfoFreq, context->audioSampleRate);
   lpFilter.setBiquad(bq_type_lowpass, lpFilterFc / context->audioSampleRate,
-                     0.707, 0);
-
+                     0.707, 1);
+  freeverb = new Freeverb(context->audioSampleRate);
+  freeverb->set_delay_times(1.0);
+  freeverb->set_feedback(0.5);
   if (context->analogFrames) {
     gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
   }
@@ -87,7 +95,8 @@ void render(BelaContext *context, void *userData) {
     }
     lpFilterFc = map(analogRead(context, n / gAudioFramesPerAnalogFrame, 0), 0,
                      0.8, 200, 2500);
-    lpFilter.setFc(lpFilterFc / context->audioSampleRate);
+    lpFilter.setFc((lpFilterFc + lfo.process() * lfoDepth) /
+                   context->audioSampleRate);
 
     float sample = 0.0;
 
@@ -106,10 +115,10 @@ void render(BelaContext *context, void *userData) {
       }
       sample += envelopes[i].process() * oscillators[i].process();
     }
-    //todo: improve/remove filter as adds noise
+    // todo: improve/remove filter as adds noise
     float out = lpFilter.process(sample / numPressed);
     for (unsigned int ch = 0; ch < context->audioInChannels; ch++) {
-      context->audioOut[context->audioInChannels * n + ch] = out;
+      context->audioOut[context->audioInChannels * n + ch] = out * volume;
     }
   }
 }
