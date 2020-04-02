@@ -1,34 +1,44 @@
 #include <Bela.h>
-#include <libraries/ADSR/ADSR.h>
-#include <libraries/Oscillator/Oscillator.h>
+#include <stk/ADSR.h>
+#include <stk/BlitSaw.h>
+#include <stk/FreeVerb.h>
+#include <stk/Generator.h>
+#include <stk/OnePole.h>
+#include <stk/SineWave.h>
+
 #include <cmath>
 
-#include "Biquad/Biquad.h"
 #include "I2C_MPR121/I2C_MPR121.h"
-#include "OscillatorHarmonics/OscillatorHarmonics.h"
+
+using namespace stk;
 
 #define NUM_TOUCH_PINS 12  // How many pins there are
 
 int gAudioFramesPerAnalogFrame = 0;
 
 // 12 notes of a C major scale...
-float gFrequencies[NUM_TOUCH_PINS] = {261.63, 293.66, 329.63, 349.23,
-                                      392.00, 440.00, 493.88, 523.25,
-                                      587.33, 659.25, 698.25, 783.99};
-OscillatorHarmonics oscillators[NUM_TOUCH_PINS];
+StkFloat gFrequencies[NUM_TOUCH_PINS] = {261.63, 293.66, 329.63, 349.23,
+                                         392.00, 440.00, 493.88, 523.25,
+                                         587.33, 659.25, 698.25, 783.99};
 
-float gAttack = 0.1;             // Envelope attack (seconds)
-float gDecay = 0.25;             // Envelope decay (seconds)
-float gRelease = 3.0;            // Envelope release (seconds)
-float gSustain = 1.0;            // Envelope sustain level
-ADSR envelopes[NUM_TOUCH_PINS];  // ADSR envelope
-Biquad lpFilter = Biquad();
-float lpFilterFc = 0;
-Oscillator lfo;
-float lfoFreq = 0.5;
+StkFrames frames;
+BlitSaw *oscillators[NUM_TOUCH_PINS];
+
+StkFloat gAttack = 0.1;           // Envelope attack (seconds)
+StkFloat gDecay = 0.25;           // Envelope decay (seconds)
+StkFloat gRelease = 2;          // Envelope release (seconds)
+StkFloat gSustain = 1.0;          // Envelope sustain level
+ADSR *envelopes[NUM_TOUCH_PINS];  // ADSR envelope
+
+OnePole *lpFilter;
+StkFloat lpFilterFc = 0;
+
+SineWave *lfo;
+StkFloat lfoFreq = 0.5;
 int lfoDepth = 150;
-Freeverb *freeverb;
-float volume = 0.5;
+
+FreeVerb *freeverb;
+StkFloat volume = 0.5;
 
 /* MPR 121 */
 int readInterval =
@@ -45,11 +55,20 @@ void readMPR121(void *);
 void setEnvelopeGate(ADSR *envelope, float amplitude) {
   unsigned int envState = envelope->getState();
   if (amplitude > 0.01 &&
-      (envState == envState::env_idle || envState == envState::env_release)) {
-    envelope->gate(true);
-  } else if (amplitude < 0.01 && envState != envState::env_idle) {
-    envelope->gate(false);
+      (envState == ADSR::IDLE || envState == ADSR::RELEASE)) {
+    envelope->keyOn();
+  } else if (amplitude < 0.01 && envState != ADSR::IDLE) {
+    envelope->keyOff();
   }
+}
+
+void setLowPass(StkFloat frequency, OnePole *lfo) {
+  // input * a0 + ym1 * b1;
+  StkFloat a1 = expf(-2.0f * (StkFloat)M_PI * frequency);
+  StkFloat b0 = 1.0f - a1;
+
+  // b_[0] * inputs_[0] - a_[1] * outputs_[1];
+  lfo->setCoefficients(a1, b0);
 }
 
 bool setup(BelaContext *context, void *userData) {
@@ -61,23 +80,32 @@ bool setup(BelaContext *context, void *userData) {
   i2cTask = Bela_createAuxiliaryTask(readMPR121, 50, "bela-mpr121");
   readIntervalSamples = context->audioSampleRate / readInterval;
 
+  Stk::setSampleRate(context->audioSampleRate);
+  frames.resize(context->audioFrames, context->audioOutChannels);
   for (unsigned int i = 0; i < NUM_TOUCH_PINS; i++) {
-    oscillators[i] = OscillatorHarmonics{
-        gFrequencies[i]/2, context->audioSampleRate, Oscillator::triangle, 3,
-        OscillatorHarmonics::uneven};
+    oscillators[i] = new BlitSaw{};
+    oscillators[i]->setFrequency(gFrequencies[i] / 2);
+    oscillators[i]->setHarmonics(3);
 
     // Set ADSR parameters
-    envelopes[i].setAttackRate(gAttack * context->audioSampleRate);
-    envelopes[i].setDecayRate(gDecay * context->audioSampleRate);
-    envelopes[i].setReleaseRate(gRelease * context->audioSampleRate);
-    envelopes[i].setSustainLevel(gSustain);
+    envelopes[i] = new ADSR{};
+    envelopes[i]->setAttackTime(gAttack);
+    envelopes[i]->setDecayTime(gDecay);
+    envelopes[i]->setReleaseTime(gRelease);
+    envelopes[i]->setSustainLevel(gSustain);
   }
-  lfo.setup(lfoFreq, context->audioSampleRate);
-  lpFilter.setBiquad(bq_type_lowpass, lpFilterFc / context->audioSampleRate,
-                     0.707, 1);
-  freeverb = new Freeverb(context->audioSampleRate);
-  freeverb->set_delay_times(1.0);
-  freeverb->set_feedback(0.5);
+
+  lfo = new SineWave{};
+  lfo->setFrequency(lfoFreq / context->audioSampleRate);
+  // setLowPass(lpFilterFc, lpFilter);
+
+  freeverb = new FreeVerb{};
+  freeverb->setMode(1);
+  freeverb->setEffectMix(0.1);
+  freeverb->setRoomSize(0.1);
+  freeverb->setDamping(0.1);
+  freeverb->setWidth(0.1);
+
   if (context->analogFrames) {
     gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
   }
@@ -94,10 +122,10 @@ void render(BelaContext *context, void *userData) {
     }
     lpFilterFc = map(analogRead(context, n / gAudioFramesPerAnalogFrame, 0), 0,
                      0.8, 200, 2500);
-    lpFilter.setFc((lpFilterFc + lfo.process() * lfoDepth) /
-                   context->audioSampleRate);
+    // setLowPass((lpFilterFc + lfo->tick() *
+    // lfoDepth)/context->audioSampleRate, lpFilter);
 
-    float sample = 0.0;
+    StkFloat sample = 0.0;
 
     int numPressed = 1;
     for (int i = 0; i < NUM_TOUCH_PINS; i++) {
@@ -108,14 +136,14 @@ void render(BelaContext *context, void *userData) {
       }
 
       float amplitude = sensorValue[i] / 400.f;
-      setEnvelopeGate(&envelopes[i], amplitude);
-      if (envelopes[i].getState() != envState::env_idle) {
+
+      setEnvelopeGate(envelopes[i], amplitude);
+      if (envelopes[i]->getState() != ADSR::IDLE) {
         numPressed++;
       }
-      sample += envelopes[i].process() * oscillators[i].process();
+      sample += envelopes[i]->tick() * oscillators[i]->tick();
     }
-    // todo: improve/remove filter as adds noise
-    float out = lpFilter.process(sample / numPressed);
+    StkFloat out = freeverb->tick(sample/ numPressed) ;
     for (unsigned int ch = 0; ch < context->audioInChannels; ch++) {
       context->audioOut[context->audioInChannels * n + ch] = out * volume;
     }
