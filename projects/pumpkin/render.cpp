@@ -1,56 +1,77 @@
 #include <Bela.h>
 #include <libraries/ADSR/ADSR.h>
 #include <libraries/Oscillator/Oscillator.h>
+#include <stk/JCRev.h>
+
 #include <cmath>
 
 #include "Biquad/Biquad.h"
 #include "I2C_MPR121/I2C_MPR121.h"
 #include "OscillatorHarmonics/OscillatorHarmonics.h"
-#include "Freeverb/Freeverb.h"
 
-#define NUM_TOUCH_PINS 12  // How many pins there are
+#define NUM_TOUCH_PINS 12
+
+using namespace stk;
 
 int gAudioFramesPerAnalogFrame = 0;
 
-// 12 notes of a C major scale...
+OscillatorHarmonics oscillators[NUM_TOUCH_PINS];
+ADSR envelopes[NUM_TOUCH_PINS];
+Biquad lowPassFilter = Biquad();
+Oscillator lfo;
+JCRev reverb = JCRev();
+
+/**
+ * Audio parameters
+ **/
+float gAttack = 0.1;   // Envelope attack (seconds)
+float gDecay = 0.25;   // Envelope decay (seconds)
+float gRelease = 3.0;  // Envelope release (seconds)
+float gSustain = 1.0;  // Envelope sustain level
+float lowPassFilterFc = 0;
+float lfoFreq = 0.5;
+float lfoDepth = 50;
+float lowPassRangeBottom = 200;
+float lowPassRangeTop = 2500;
+float volume = 0.7;
+// 12 notes of a C major scale
 float gFrequencies[NUM_TOUCH_PINS] = {261.63, 293.66, 329.63, 349.23,
                                       392.00, 440.00, 493.88, 523.25,
                                       587.33, 659.25, 698.25, 783.99};
-OscillatorHarmonics oscillators[NUM_TOUCH_PINS];
 
-float gAttack = 0.1;             // Envelope attack (seconds)
-float gDecay = 0.25;             // Envelope decay (seconds)
-float gRelease = 3.0;            // Envelope release (seconds)
-float gSustain = 1.0;            // Envelope sustain level
-ADSR envelopes[NUM_TOUCH_PINS];  // ADSR envelope
-Biquad lpFilter = Biquad();
-float lpFilterFc = 0;
-Oscillator lfo;
-float lfoFreq = 0.5;
-int lfoDepth = 150;
-Freeverb *freeverb;
-float volume = 0.5;
+/**
+ * MPR 121
+ **/
+int readInterval = 50;  // how often the MPR121 is read (in Hz)
+float sensorValue[NUM_TOUCH_PINS];
+int readCount = 0;            // How long until we read again...
+int readIntervalSamples = 0;  // How many samples between reads
 
-/* MPR 121 */
-int readInterval =
-    50;  // Change this to change how often the MPR121 is read (in Hz)
-int threshold = 0;  // Change this threshold to set the minimum amount of touch
-int sensorValue[NUM_TOUCH_PINS];  // This array holds the continuous sensor
-                                  // values
-I2C_MPR121 mpr121;                // Object to handle MPR121 sensing
-AuxiliaryTask i2cTask;            // Auxiliary task to read I2C
-int readCount = 0;                // How long until we read again...
-int readIntervalSamples = 0;      // How many samples between reads
-void readMPR121(void *);
+I2C_MPR121 mpr121;      // Object to handle MPR121 sensing
+AuxiliaryTask i2cTask;  // Auxiliary task to read I2C
+
+void readMPR121(void *) {
+  float normalizeFactor = 400.f;  // ensure we get values from 0 to 1
+  int touchThreshold = 5;      //  minimum amount of touch for trigger
+  for (int i = 0; i < NUM_TOUCH_PINS; i++) {
+    sensorValue[i] = mpr121.getSensorValue(i, touchThreshold) / normalizeFactor;
+  }
+}
 
 void setEnvelopeGate(ADSR *envelope, float amplitude) {
   unsigned int envState = envelope->getState();
-  if (amplitude > 0.01 &&
+  if (amplitude > 0 &&
       (envState == envState::env_idle || envState == envState::env_release)) {
     envelope->gate(true);
-  } else if (amplitude < 0.01 && envState != envState::env_idle) {
+  } else if (amplitude == 0 && envState != envState::env_idle) {
     envelope->gate(false);
   }
+}
+
+float getLowPassFilterFc(BelaContext *context, int analogFrameIndex) {
+  float value = map(analogRead(context, analogFrameIndex, 0), 0, 1,
+                    lowPassRangeBottom, lowPassRangeTop);
+  return (value + lfo.process() * lfoDepth);
 }
 
 bool setup(BelaContext *context, void *userData) {
@@ -63,9 +84,9 @@ bool setup(BelaContext *context, void *userData) {
   readIntervalSamples = context->audioSampleRate / readInterval;
 
   for (unsigned int i = 0; i < NUM_TOUCH_PINS; i++) {
-    oscillators[i] = OscillatorHarmonics{
-        gFrequencies[i]/2, context->audioSampleRate, Oscillator::triangle, 3,
-        OscillatorHarmonics::uneven};
+    oscillators[i] =
+        OscillatorHarmonics{gFrequencies[i] / 2, context->audioSampleRate,
+                            Oscillator::sawtooth, 3, OscillatorHarmonics::even};
 
     // Set ADSR parameters
     envelopes[i].setAttackRate(gAttack * context->audioSampleRate);
@@ -74,11 +95,8 @@ bool setup(BelaContext *context, void *userData) {
     envelopes[i].setSustainLevel(gSustain);
   }
   lfo.setup(lfoFreq, context->audioSampleRate);
-  lpFilter.setBiquad(bq_type_lowpass, lpFilterFc / context->audioSampleRate,
-                     0.707, 1);
-  freeverb = new Freeverb(context->audioSampleRate);
-  freeverb->set_delay_times(1.0);
-  freeverb->set_feedback(0.5);
+  lowPassFilter.setBiquad(bq_type_lowpass,
+                          lowPassFilterFc / context->audioSampleRate, 0.707, 1);
   if (context->analogFrames) {
     gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
   }
@@ -93,14 +111,12 @@ void render(BelaContext *context, void *userData) {
       readCount = 0;
       Bela_scheduleAuxiliaryTask(i2cTask);
     }
-    lpFilterFc = map(analogRead(context, n / gAudioFramesPerAnalogFrame, 0), 0,
-                     0.8, 200, 2500);
-    lpFilter.setFc((lpFilterFc + lfo.process() * lfoDepth) /
-                   context->audioSampleRate);
+    lowPassFilterFc =
+        getLowPassFilterFc(context, n / gAudioFramesPerAnalogFrame);
+    lowPassFilter.setFc(lowPassFilterFc / context->audioSampleRate);
 
     float sample = 0.0;
 
-    int numPressed = 1;
     for (int i = 0; i < NUM_TOUCH_PINS; i++) {
       if (i >= 4 && i <= 7) {
         // sensor 4-7 are not connected, and we do not want to skip
@@ -108,26 +124,16 @@ void render(BelaContext *context, void *userData) {
         continue;
       }
 
-      float amplitude = sensorValue[i] / 400.f;
-      setEnvelopeGate(&envelopes[i], amplitude);
-      if (envelopes[i].getState() != envState::env_idle) {
-        numPressed++;
-      }
+      setEnvelopeGate(&envelopes[i], sensorValue[i]);
       sample += envelopes[i].process() * oscillators[i].process();
     }
-    // todo: improve/remove filter as adds noise
-    float out = lpFilter.process(sample / numPressed);
+    sample /= NUM_TOUCH_PINS;
+
+    float out = reverb.tick(lowPassFilter.process(sample)) * volume;
     for (unsigned int ch = 0; ch < context->audioInChannels; ch++) {
-      context->audioOut[context->audioInChannels * n + ch] = out * volume;
+      audioWrite(context, n, ch, out);
     }
   }
 }
 
 void cleanup(BelaContext *context, void *userData) {}
-
-// Auxiliary task to read the I2C board
-void readMPR121(void *) {
-  for (int i = 0; i < NUM_TOUCH_PINS; i++) {
-    sensorValue[i] = mpr121.getSensorValue(i, threshold);
-  }
-}

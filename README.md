@@ -24,11 +24,3 @@ http://instrumentslab.org
 
 The Bela software is distributed under the GNU Lesser General Public License
 (LGPL 3.0), available here: https://www.gnu.org/licenses/lgpl-3.0.txt
-
-
-
-
-./scripts/build_project.sh ./projects/pumpkin/ --force
-
-./scripts/halt_board.sh 
-
