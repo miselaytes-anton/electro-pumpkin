@@ -23,6 +23,6 @@ class Freeverb {
  public:
   void set_delay_times(float factor);
   void set_feedback(float val);
-  Freeverb(float sample_rate);
+  Freeverb(float sample_rate = 41000.0f);
   float tick(float in);
 };

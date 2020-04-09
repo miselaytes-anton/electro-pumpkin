@@ -4,29 +4,39 @@
 #include <stk/Delay.h>
 
 #include <cmath>
+#include <vector>
 
-#include "Freeverb/Freeverb.h"
 #include "Biquad/Biquad.h"
+#include "Freeverb/Freeverb.h"
 #include "I2C_MPR121/I2C_MPR121.h"
 #include "OscillatorHarmonics/OscillatorHarmonics.h"
 
 #define NUM_TOUCH_PINS 12
 
 using namespace stk;
+using namespace std;
 
 int gAudioFramesPerAnalogFrame = 0;
 int sampleRate = 41000;
 
-Delay delay = Delay(sampleRate * 2, sampleRate * 2);
-OscillatorHarmonics oscillators[NUM_TOUCH_PINS];
-ADSR envelopes[NUM_TOUCH_PINS];
-Biquad lowPassFilter = Biquad();
+Delay delay;
+vector<OscillatorHarmonics> oscillators;
+vector<ADSR> envelopes;
+Biquad lowPassFilter;
 Oscillator lfo;
-Freeverb reverb = Freeverb(sampleRate);
+Freeverb reverb;
+
+I2C_MPR121 mpr121;      // Object to handle MPR121 sensing
+AuxiliaryTask i2cTask;  // Auxiliary task to read I2C
 
 /**
  * Audio parameters
  **/
+float reverbDelayLength = 1;
+float reverbFeedback = 0.2;
+float biquadQFactor = 0.707;
+float biquadPeakGain = 1;
+float delayLength = 2;
 float delayDecay = 0.75f;
 float audioInputGain = 0.2f;
 float gAttack = 0.1;   // Envelope attack (seconds)
@@ -40,31 +50,29 @@ float lowPassRangeBottom = 200;
 float lowPassRangeTop = 2500;
 float volume = 0.7;
 // 12 notes of a C major scale
-float gFrequencies[NUM_TOUCH_PINS] = {261.63, 293.66, 329.63, 349.23,
-                                      392.00, 440.00, 493.88, 523.25,
-                                      587.33, 659.25, 698.25, 783.99};
+const vector<float> gFrequencies = {261.63, 293.66, 329.63, 349.23,
+                                    392.00, 440.00, 493.88, 523.25,
+                                    587.33, 659.25, 698.25, 783.99};
 
 /**
- * MPR 121
+ * MPR 121 parameters
  **/
+const vector<int> activePins = {0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11};
 int readInterval = 50;  // how often the MPR121 is read (in Hz)
 float sensorValue[NUM_TOUCH_PINS];
 int readCount = 0;            // How long until we read again...
 int readIntervalSamples = 0;  // How many samples between reads
 
-I2C_MPR121 mpr121;      // Object to handle MPR121 sensing
-AuxiliaryTask i2cTask;  // Auxiliary task to read I2C
-
 void readMPR121(void *) {
   float normalizeFactor = 400.f;  // ensure we get values from 0 to 1
   int touchThreshold = 5;         //  minimum amount of touch for trigger
-  for (int i = 0; i < NUM_TOUCH_PINS; i++) {
+  for (unsigned i : activePins) {
     sensorValue[i] = mpr121.getSensorValue(i, touchThreshold) / normalizeFactor;
   }
 }
 
 void setEnvelopeGate(ADSR *envelope, float amplitude) {
-  unsigned int envState = envelope->getState();
+  unsigned envState = envelope->getState();
   if (amplitude > 0 &&
       (envState == envState::env_idle || envState == envState::env_release)) {
     envelope->gate(true);
@@ -86,7 +94,7 @@ float delayFeedbackTick(float sample) {
 }
 
 bool setup(BelaContext *context, void *userData) {
-  if (!mpr121.begin(1, 0x5B)) {
+  if (!mpr121.begin()) {
     rt_printf("Error initialising MPR121\n");
     return false;
   }
@@ -94,30 +102,39 @@ bool setup(BelaContext *context, void *userData) {
   i2cTask = Bela_createAuxiliaryTask(readMPR121, 50, "bela-mpr121");
   readIntervalSamples = context->audioSampleRate / readInterval;
 
-  for (unsigned int i = 0; i < NUM_TOUCH_PINS; i++) {
-    oscillators[i] =
-        OscillatorHarmonics{gFrequencies[i] / 2, context->audioSampleRate,
-                            Oscillator::sawtooth, 3, OscillatorHarmonics::even};
+  for (unsigned i : activePins) {
+    OscillatorHarmonics oscillator{
+        gFrequencies[i] / 2, context->audioSampleRate, Oscillator::sawtooth, 3,
+        OscillatorHarmonics::even};
+    oscillators.push_back(oscillator);
 
     // Set ADSR parameters
-    envelopes[i].setAttackRate(gAttack * context->audioSampleRate);
-    envelopes[i].setDecayRate(gDecay * context->audioSampleRate);
-    envelopes[i].setReleaseRate(gRelease * context->audioSampleRate);
-    envelopes[i].setSustainLevel(gSustain);
+    ADSR envelope;
+    envelope.setAttackRate(gAttack * context->audioSampleRate);
+    envelope.setDecayRate(gDecay * context->audioSampleRate);
+    envelope.setReleaseRate(gRelease * context->audioSampleRate);
+    envelope.setSustainLevel(gSustain);
+    envelopes.push_back(envelope);
   }
   lfo.setup(lfoFreq, context->audioSampleRate);
   lowPassFilter.setBiquad(bq_type_lowpass,
-                          lowPassFilterFc / context->audioSampleRate, 0.707, 1);
+                          lowPassFilterFc / context->audioSampleRate, biquadQFactor, biquadPeakGain);
+  
+  reverb.set_delay_times(reverbDelayLength);
+  reverb.set_feedback(reverbFeedback);
+
+  delay.setMaximumDelay(context->audioSampleRate * delayLength);
+  delay.setDelay(context->audioSampleRate * delayLength);
+
   if (context->analogFrames) {
     gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
   }
-  reverb.set_delay_times(1.0f);
-  reverb.set_feedback(0.2f);
+
   return true;
 }
 
 void render(BelaContext *context, void *userData) {
-  for (unsigned int n = 0; n < context->audioFrames; n++) {
+  for (unsigned n = 0; n < context->audioFrames; n++) {
     // schedule touch sensor readings
     if (++readCount >= readIntervalSamples) {
       readCount = 0;
@@ -129,19 +146,15 @@ void render(BelaContext *context, void *userData) {
 
     float sample = 0.0;
 
-    for (int i = 0; i < NUM_TOUCH_PINS; i++) {
-      if (i >= 4 && i <= 7) {
-        // sensor 4-7 are not connected, and we do not want to skip
-        // notes
-        continue;
-      }
-
+    for (unsigned i : activePins) {
       setEnvelopeGate(&envelopes[i], sensorValue[i]);
       sample += envelopes[i].process() * oscillators[i].process();
     }
     sample /= 8;
-    float out = volume * reverb.tick(delayFeedbackTick(lowPassFilter.process(sample) + audioInputGain * audioRead(context, n, 0)));
-    for (unsigned int ch = 0; ch < context->audioInChannels; ch++) {
+    float out = volume * reverb.tick(delayFeedbackTick(
+                             lowPassFilter.process(sample) +
+                             audioInputGain * audioRead(context, n, 0)));
+    for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, out);
     }
   }
