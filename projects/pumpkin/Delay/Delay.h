@@ -5,16 +5,15 @@ using namespace std;
 class Delay {
  private:
   vector<float> _samples;
-  int _readPosition;
-  int _writePosition;
-  float _delayLength;
-  float _maxDelayLength;
+  int long _writePosition;
+  int long _delayLength;
+  int long _maxDelayLength;
   float _feedback;
 
  public:
-  Delay(float delayLength = 41000, float maxDelayLength = 41000,
+  Delay(int long delayLength = 41000, int long maxDelayLength = 41000,
         float feedback = 0);
   ~Delay();
-  void setDelayLength(float delayLength);
+  void setDelayLength(int long delayLength);
   float process(float input);
 };
