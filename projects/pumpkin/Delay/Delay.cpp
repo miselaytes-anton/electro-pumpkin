@@ -3,20 +3,19 @@
 
 using namespace std;
 
-Delay::Delay(float delayLength, int long maxDelayLength,
-             float feedback) {
-  _samples.resize(maxDelayLength);
-  _delayLength = delayLength;
-  _maxDelayLength = maxDelayLength;
-  _feedback = feedback;
+Delay::Delay(float fs, float delayLength, long maxDelayLength) {
+  _fs = fs;
+  _samples.resize(maxDelayLength * fs);
+  _delayLength = delayLength * fs;
+  _maxDelayLength = maxDelayLength * fs;
   _writePosition = 0;
 }
 
 void Delay::setDelayLength(float delayLength) {
-  _delayLength = delayLength;
+  _delayLength = delayLength * _fs;
 }
 
-float Delay::process(float input) {
+float Delay::process(float input, function<float(float previousSample)> writeDelaySample) {
   int long delayLengthCeil = ceil(_delayLength);
   float delta = delayLengthCeil - _delayLength;
 
@@ -27,13 +26,13 @@ float Delay::process(float input) {
 
   float previousValue = _samples[readPositionPrevious + 1] + delta * (_samples[readPositionPrevious] - _samples[readPositionPrevious + 1]);
 		  
-  _samples[_writePosition] = (input + _feedback * previousValue) * 0.5;
+  _samples[_writePosition] = writeDelaySample(previousValue);
 
   if (++_writePosition >= _maxDelayLength) {
     _writePosition = 0;
   }
 
-  return _samples[_writePosition];
+  return previousValue;
 }
 
 Delay::~Delay() {}

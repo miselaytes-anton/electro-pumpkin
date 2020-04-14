@@ -1,3 +1,4 @@
+#pragma once
 #include <vector>
 
 using namespace std;
@@ -8,12 +9,11 @@ class Delay {
   int long _writePosition;
   int long _delayLength;
   int long _maxDelayLength;
-  float _feedback;
+  float _fs;
 
  public:
-  Delay(float delayLength = 41000, int long maxDelayLength = 41000,
-        float feedback = 0);
+  Delay(float fs=41000, float delayLength = 1, long maxDelayLength = 1);
   ~Delay();
   void setDelayLength(float delayLength);
-  float process(float input);
+  float process(float input, function<float(float previousSample)> writeDelaySample);
 };
