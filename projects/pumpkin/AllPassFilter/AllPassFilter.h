@@ -1,6 +1,6 @@
 #pragma once
-#include "../CombFilterFeedforward/CombFilterFeedforward.h"
 #include "../CombFilterFeedback/CombFilterFeedback.h"
+#include "../CombFilterFeedforward/CombFilterFeedforward.h"
 
 class AllPassFilter {
  private:
@@ -9,10 +9,10 @@ class AllPassFilter {
   float _delayLength;
   float _feedback;
   float _fs;
-  void setDelayLength(float delayLength);
 
  public:
   AllPassFilter(float fs = 41000, float delayLength = 1, float feedback = 0.7);
+  void setDelayLength(float delayLength);
   ~AllPassFilter();
   float process(float input);
 };

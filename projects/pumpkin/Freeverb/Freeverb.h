@@ -1,28 +1,26 @@
-/***** Freeverb.h *****/
-//https://github.com/djzielin/Freeverb-test
+#pragma once
+#include "../AllPassFilter/AllPassFilter.h"
+#include "../CombFilterFeedback/CombFilterFeedback.h"
 
-#include "allpass_filter.h"
-#include "feedback_comb_filter.h"
-
-// reimplimentation of freeverb algorithm
 class Freeverb {
  private:
-  float sampleRate;
+  float _fs;
 
-  float delay_times[8] = {1116.0f / 44100.0f, 1188.0f / 44100.0f,
+  float delayTimes[8] = {1116.0f / 44100.0f, 1188.0f / 44100.0f,
                           1277.0f / 44100.0f, 1356.0f / 44100.0f,
                           1422.0f / 44100.0f, 1491.0f / 44100.0f,
                           1557.0f / 44100.0f, 1617.0f / 44100.0f};
 
-  float allpass_times[4] = {225.0f / 44100.0f, 556.0f / 44100.0f,
+  float allpassTimes[4] = {225.0f / 44100.0f, 556.0f / 44100.0f,
                             441.0f / 44100.0f, 341.0f / 44100.0f};
 
-  feedback_comb_filter *fbcf[8];
-  allpass_filter *apf[4];
+  CombFilterFeedback *fbcf[8];
+  AllPassFilter *apf[4];
 
  public:
-  void set_delay_times(float factor);
-  void set_feedback(float val);
-  Freeverb(float sample_rate = 41000.0f);
-  float tick(float in);
+  void setDelayTimes(float factor);
+  void setFeedback(float val);
+  Freeverb(float fs = 41000.0f, float delayFactor = 5.0f,
+           float feedback = 0.84f);
+  float process(float in);
 };

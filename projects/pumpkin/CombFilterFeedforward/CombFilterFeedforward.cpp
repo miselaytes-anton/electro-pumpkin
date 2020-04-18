@@ -18,4 +18,8 @@ void CombFilterFeedforward::setDelayLength(float delayLength) {
   _delay.setDelayLength(delayLength);
 }
 
+void CombFilterFeedforward::setFeedback(float feedback) {
+   _feedback = feedback;
+}
+
 CombFilterFeedforward::~CombFilterFeedforward() {}

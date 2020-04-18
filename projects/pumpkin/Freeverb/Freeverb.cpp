@@ -1,43 +1,43 @@
-/***** Freeverb.cpp *****/
 #include "Freeverb.h"
+#include <cmath>
 
-void Freeverb::set_delay_times(float factor) {
+void Freeverb::setDelayTimes(float factor) {
   for (int i = 0; i < 8; i++) {
-    fbcf[i]->set_delay_time(delay_times[i] * factor);
+    fbcf[i]->setDelayLength(delayTimes[i] * factor);
   }
 }
 
-void Freeverb::set_feedback(float val) {
+void Freeverb::setFeedback(float feedback) {
   for (int i = 0; i < 8; i++) {
-    fbcf[i]->set_feedback(0.84f);
+    fbcf[i]->setFeedback(feedback);
   }
 }
 
-Freeverb::Freeverb(float sample_rate) {
-  sampleRate = sample_rate;
+Freeverb::Freeverb(float fs, float delayFactor, float feedback) {
+  _fs = fs;
 
   for (int i = 0; i < 8; i++) {
-    fbcf[i] = new feedback_comb_filter(sampleRate, 1.0f);
+    fbcf[i] = new CombFilterFeedback(fs, delayTimes[i] * delayFactor,
+                                     ceil(delayTimes[i] * delayFactor * 2), feedback);
   }
-
-  set_delay_times(5.0f);
-  set_feedback(0.84f);
 
   for (int i = 0; i < 4; i++) {
-    apf[i] = new allpass_filter(sampleRate, 1.0f);
-    apf[i]->set_delay_time(allpass_times[i]);
-    apf[i]->set_feedback(0.5f);
+    apf[i] = new AllPassFilter(_fs, allpassTimes[i], feedback);
   }
 }
 
-float Freeverb::tick(float in) {
+float Freeverb::process(float in) {
   float out = 0.0f;
 
-  for (int i = 0; i < 8; i++)  // PROCESS PARRALLELFEEDBACK COMB FILTERS
-    out += fbcf[i]->tick(in) * 0.1f;
+  // comb filters in parallel
+  for (int i = 0; i < 8; i++) {
+    out += fbcf[i]->process(in);
+  }
 
-  for (int i = 0; i < 4; i++)  // PROCESS ALL PASS FILTERS
-    out = apf[i]->tick(out);
+  // sequence of all pass filters
+  for (int i = 0; i < 4; i++) {
+    out = apf[i]->process(out);
+  }
 
-  return out;
+  return out * 8;
 }
