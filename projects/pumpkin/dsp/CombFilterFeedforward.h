@@ -1,5 +1,5 @@
 #pragma once
-#include "../Delay/Delay.h"
+#include "Delay.h"
 
 class CombFilterFeedforward {
  private:

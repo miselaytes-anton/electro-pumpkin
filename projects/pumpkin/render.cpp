@@ -6,10 +6,10 @@
 #include <cmath>
 #include <vector>
 
-#include "Biquad/Biquad.h"
+#include "dsp/Biquad.h"
 #include "_Freeverb/Freeverb.h"
 #include "I2C_MPR121/I2C_MPR121.h"
-#include "OscillatorHarmonics/OscillatorHarmonics.h"
+#include "dsp/OscillatorHarmonics.h"
 
 #define NUM_TOUCH_PINS 12
 

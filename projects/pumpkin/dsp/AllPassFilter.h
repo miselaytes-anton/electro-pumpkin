@@ -1,6 +1,6 @@
 #pragma once
-#include "../CombFilterFeedback/CombFilterFeedback.h"
-#include "../CombFilterFeedforward/CombFilterFeedforward.h"
+#include "CombFilterFeedback.h"
+#include "CombFilterFeedforward.h"
 
 class AllPassFilter {
  private:

@@ -1,6 +1,6 @@
 #pragma once
-#include "../CombFilterFeedforward/CombFilterFeedforward.h"
-#include "../Oscillator/Oscillator.h"
+#include "CombFilterFeedforward.h"
+#include "Oscillator.h"
 
 class Flanger {
  private:

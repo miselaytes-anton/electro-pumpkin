@@ -1,6 +1,6 @@
 #pragma once
-#include "../AllPassFilter/AllPassFilter.h"
-#include "../CombFilterFeedback/CombFilterFeedback.h"
+#include "AllPassFilter.h"
+#include "CombFilterFeedback.h"
 
 class Freeverb {
  private:

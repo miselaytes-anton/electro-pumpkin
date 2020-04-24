@@ -1,7 +1,7 @@
 #pragma once
 #include <functional>
 
-#include "../Delay/Delay.h"
+#include "Delay.h"
 
 template <typename T>
 class Identity {
