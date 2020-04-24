@@ -1,6 +1,6 @@
 #include <Bela.h>
-#include <libraries/ADSR/ADSR.h>
-#include <libraries/Oscillator/Oscillator.h>
+#include "dsp/ADSR.h"
+#include "dsp/Oscillator.h"
 #include <stk/Delay.h>
 
 #include <cmath>
@@ -116,7 +116,7 @@ bool setup(BelaContext *context, void *userData) {
     envelope.setSustainLevel(gSustain);
     envelopes.push_back(envelope);
   }
-  lfo.setup(lfoFreq, context->audioSampleRate);
+  lfo.setup(context->audioSampleRate, lfoFreq);
   lowPassFilter.setBiquad(bq_type_lowpass,
                           lowPassFilterFc / context->audioSampleRate, biquadQFactor, biquadPeakGain);
   

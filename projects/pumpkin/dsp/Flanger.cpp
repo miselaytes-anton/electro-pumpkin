@@ -5,7 +5,7 @@ Flanger::Flanger(float fs, float avgDelayLength, float lfoFreq, float depth) {
   _fs = fs;
   _avgDelayLength = avgDelayLength;
   _combFilter = CombFilterFeedforward(fs, avgDelayLength, ceil(avgDelayLength) * 2, depth);
-  _lfo = Oscillator(lfoFreq, fs);
+  _lfo = Oscillator(fs, lfoFreq);
 }
 
 float Flanger::process(float input) {

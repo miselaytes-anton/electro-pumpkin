@@ -1,4 +1,4 @@
-#include <libraries/Oscillator/Oscillator.h>
+#include "Oscillator.h"
 #include <cmath>
 
 class OscillatorHarmonics {

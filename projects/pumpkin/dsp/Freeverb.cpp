@@ -15,10 +15,12 @@ void Freeverb::setFeedback(float feedback) {
 
 Freeverb::Freeverb(float fs, float delayFactor, float feedback) {
   _fs = fs;
+  float damping = 2000;
 
   for (int i = 0; i < 8; i++) {
     fbcf[i] = new CombFilterFeedback(fs, delayTimes[i] * delayFactor,
                                      ceil(delayTimes[i] * delayFactor * 2), feedback);
+    lowpass[i] = new OnePole(fs, damping);                             
   }
 
   for (int i = 0; i < 4; i++) {
@@ -31,7 +33,9 @@ float Freeverb::process(float in) {
 
   // comb filters in parallel
   for (int i = 0; i < 8; i++) {
-    out += fbcf[i]->process(in);
+    out += fbcf[i]->process(in, [&](float delayedSample) -> float {
+      return lowpass[i]->process(delayedSample) * 0.5;
+    });
   }
 
   // sequence of all pass filters
@@ -39,5 +43,5 @@ float Freeverb::process(float in) {
     out = apf[i]->process(out);
   }
 
-  return out * 8;
+  return out * 2;
 }

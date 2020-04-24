@@ -5,16 +5,21 @@
 
 OnePole::OnePole() {}
 
-OnePole::OnePole(float fc, float fs, int type) { setup(fc, fs, type); }
-
-int OnePole::setup(float fc, float fs, int type) {
-  ym1 = 0.0;  // Reset filter state
+OnePole::OnePole(float fs, float fc, int type) { 
+   ym1 = 0.0;  // Reset filter state
   _fs = fs;
-  setFilter(fc, _fs, type);
-  return 0;
+  setFilter(_fs, fc, type);
 }
 
-void OnePole::setFilter(float fc, float fs, int type) {
+OnePole::OnePole(float fs, float a0, float b1) { 
+   ym1 = 0.0;  // Reset filter state
+  _fs = fs;
+  a0 = a0;
+  b1 = b1;
+}
+
+
+void OnePole::setFilter(float fs, float fc,  int type) {
   _fs = fs;
   setType(type);
   setFc(fc);

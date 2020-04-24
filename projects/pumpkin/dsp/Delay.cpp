@@ -15,7 +15,7 @@ void Delay::setDelayLength(float delayLength) {
   _delayLength = delayLength * _fs;
 }
 
-float Delay::process(float input, function<float(float previousSample)> writeDelaySample) {
+float Delay::process(float input, function<float(float delayedSample)> writeDelaySample) {
   int long delayLengthCeil = ceil(_delayLength);
   float delta = delayLengthCeil - _delayLength;
 
@@ -24,29 +24,15 @@ float Delay::process(float input, function<float(float previousSample)> writeDel
           ? _maxDelayLength + _writePosition - delayLengthCeil
           : _writePosition - delayLengthCeil;
 
-  float previousValue = _samples[readPositionPrevious + 1] + delta * (_samples[readPositionPrevious] - _samples[readPositionPrevious + 1]);
+  float delayedSample = _samples[readPositionPrevious + 1] + delta * (_samples[readPositionPrevious] - _samples[readPositionPrevious + 1]);
 		  
-  _samples[_writePosition] = writeDelaySample(previousValue);
+  _samples[_writePosition] = writeDelaySample(delayedSample);
 
   if (++_writePosition >= _maxDelayLength) {
     _writePosition = 0;
   }
 
-  return previousValue;
+  return delayedSample;
 }
 
 Delay::~Delay() {}
-
-
-/**
- * feedback comb filter: 
- *    (input, previousValue, feedback) => (input + _feedback * previousValue) * 0.5, 
- *    (input, previousValue, feedback) => (input + _feedback * previousValue) * 0.5, 
- * feedforward comb filter: 
- *    (input, previousValue, feedback) => input,
- *    (input, previousValue, feedback) => (input + feedback * previousValue) * 0.5
- * flanger:
- *    delayLength = avgDelayLength * (1 + maxDelaySwing * sine.tick()) * samplingRate;
- *    (input, previousValue, feedback) => input,
- *    (input, previousValue, feedback) => (input + feedback * previousValue) * 0.5
-**/
