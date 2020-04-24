@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "Biquad/Biquad.h"
-#include "Freeverb/Freeverb.h"
+#include "_Freeverb/Freeverb.h"
 #include "I2C_MPR121/I2C_MPR121.h"
 #include "OscillatorHarmonics/OscillatorHarmonics.h"
 
