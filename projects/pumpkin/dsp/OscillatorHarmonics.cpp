@@ -3,15 +3,13 @@
 
 OscillatorHarmonics::OscillatorHarmonics(){};
 OscillatorHarmonics::OscillatorHarmonics(float frequency, float fs,
-                                         unsigned type, float initialPhase,
-                                         unsigned numHarmonics,
+                                         unsigned type, unsigned numHarmonics,
                                          unsigned harmonicType) {
-  setup(frequency, fs, type, initialPhase, numHarmonics, harmonicType);
+  setup(frequency, fs, type, numHarmonics, harmonicType);
 }
 
 void OscillatorHarmonics::setup(float frequency, float fs, unsigned type,
-                                float initialPhase, int numHarmonics,
-                                unsigned harmonicType) {
+                                int numHarmonics, unsigned harmonicType) {
   numHarmonics_ = numHarmonics;
   harmonicType_ = harmonicType;
   oscillators[0] = Oscillator{fs, frequency, type};

@@ -104,7 +104,7 @@ bool setup(BelaContext *context, void *userData) {
 
   for (unsigned i : activePins) {
     OscillatorHarmonics oscillator{
-        gFrequencies[i] / 2, context->audioSampleRate, Oscillator::sawtooth, 3,
+        gFrequencies[i] / 2, context->audioSampleRate, Oscillator::sawtooth, 1,
         OscillatorHarmonics::even};
     oscillators.push_back(oscillator);
 
