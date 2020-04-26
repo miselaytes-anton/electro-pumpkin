@@ -15,7 +15,7 @@ void Delay::setDelayLength(float delayLength) {
   _delayLength = delayLength * _fs;
 }
 
-float Delay::process(float input, function<float(float delayedSample)> writeDelaySample) {
+float Delay::process(float input, function<float(float delayedSample, float inputSample)> writeDelaySample) {
   int long delayLengthCeil = ceil(_delayLength);
   float delta = delayLengthCeil - _delayLength;
 
@@ -26,7 +26,7 @@ float Delay::process(float input, function<float(float delayedSample)> writeDela
 
   float delayedSample = _samples[readPositionPrevious + 1] + delta * (_samples[readPositionPrevious] - _samples[readPositionPrevious + 1]);
 		  
-  _samples[_writePosition] = writeDelaySample(delayedSample);
+  _samples[_writePosition] = writeDelaySample(delayedSample, input);
 
   if (++_writePosition >= _maxDelayLength) {
     _writePosition = 0;

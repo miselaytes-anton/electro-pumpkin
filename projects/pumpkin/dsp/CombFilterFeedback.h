@@ -17,9 +17,9 @@ private:
   Delay _delay;
   float _feedback;
   float _fs;
-  float processInput(float inputSample, float delayedSample, float feedback);
 
 public:
+  CombFilterFeedback();
   CombFilterFeedback(float fs = 41000, float delayLength = 1,
                      long maxDelayLength = 2, float feedback = 0);
   ~CombFilterFeedback();

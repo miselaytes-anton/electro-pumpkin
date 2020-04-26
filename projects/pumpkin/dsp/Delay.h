@@ -5,6 +5,15 @@
 
 using namespace std;
 
+template <typename T>
+class DefaultWriteDelaySample {
+public:
+    DefaultWriteDelaySample() {}
+    T operator () (T delayedSample, T inputSample) const {
+        return inputSample;
+    }
+};
+
 class Delay {
 private:
   vector<float> _samples;
@@ -19,5 +28,5 @@ public:
   ~Delay();
   void setDelayLength(float delayLength);
   float process(float input,
-                function<float(float delayedSample)> writeDelaySample);
+                function<float(float delayedSample, float inputSample)> writeDelaySample = DefaultWriteDelaySample<float>());
 };

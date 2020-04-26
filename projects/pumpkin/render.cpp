@@ -1,33 +1,32 @@
-#include <Bela.h>
 #include "dsp/ADSR.h"
+#include "dsp/CombFilterFeedback.h"
 #include "dsp/Oscillator.h"
-#include <stk/Delay.h>
+#include <Bela.h>
 
 #include <cmath>
 #include <vector>
 
-#include "dsp/Biquad.h"
-#include "_Freeverb/Freeverb.h"
 #include "I2C_MPR121/I2C_MPR121.h"
+#include "_Freeverb/Freeverb.h"
+#include "dsp/Biquad.h"
 #include "dsp/OscillatorHarmonics.h"
 
 #define NUM_TOUCH_PINS 12
 
-using namespace stk;
 using namespace std;
 
 int gAudioFramesPerAnalogFrame = 0;
 int sampleRate = 41000;
 
-Delay delay;
+CombFilterFeedback *combFilterFeedback;
 vector<OscillatorHarmonics> oscillators;
 vector<ADSR> envelopes;
 Biquad lowPassFilter;
 Oscillator lfo;
 Freeverb reverb;
 
-I2C_MPR121 mpr121;      // Object to handle MPR121 sensing
-AuxiliaryTask i2cTask;  // Auxiliary task to read I2C
+I2C_MPR121 mpr121;     // Object to handle MPR121 sensing
+AuxiliaryTask i2cTask; // Auxiliary task to read I2C
 
 /**
  * Audio parameters
@@ -39,10 +38,10 @@ float biquadPeakGain = 1;
 float delayLength = 2;
 float delayDecay = 0.75f;
 float audioInputGain = 0.2f;
-float gAttack = 0.1;   // Envelope attack (seconds)
-float gDecay = 0.25;   // Envelope decay (seconds)
-float gRelease = 3.0;  // Envelope release (seconds)
-float gSustain = 1.0;  // Envelope sustain level
+float gAttack = 0.1;  // Envelope attack (seconds)
+float gDecay = 0.25;  // Envelope decay (seconds)
+float gRelease = 3.0; // Envelope release (seconds)
+float gSustain = 1.0; // Envelope sustain level
 float lowPassFilterFc = 0;
 float lfoFreq = 0.5;
 float lfoDepth = 50;
@@ -58,14 +57,14 @@ const vector<float> gFrequencies = {261.63, 293.66, 329.63, 349.23,
  * MPR 121 parameters
  **/
 const vector<int> activePins = {0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11};
-int readInterval = 50;  // how often the MPR121 is read (in Hz)
+int readInterval = 50; // how often the MPR121 is read (in Hz)
 float sensorValue[NUM_TOUCH_PINS];
-int readCount = 0;            // How long until we read again...
-int readIntervalSamples = 0;  // How many samples between reads
+int readCount = 0;           // How long until we read again...
+int readIntervalSamples = 0; // How many samples between reads
 
 void readMPR121(void *) {
-  float normalizeFactor = 400.f;  // ensure we get values from 0 to 1
-  int touchThreshold = 5;         //  minimum amount of touch for trigger
+  float normalizeFactor = 400.f; // ensure we get values from 0 to 1
+  int touchThreshold = 5;        //  minimum amount of touch for trigger
   for (unsigned i : activePins) {
     sensorValue[i] = mpr121.getSensorValue(i, touchThreshold) / normalizeFactor;
   }
@@ -85,12 +84,6 @@ float getLowPassFilterFc(BelaContext *context, int analogFrameIndex) {
   float value = map(analogRead(context, analogFrameIndex, 0), 0, 1,
                     lowPassRangeBottom, lowPassRangeTop);
   return (value + lfo.process() * lfoDepth);
-}
-
-float delayFeedbackTick(float sample) {
-  float out = sample + delay.tapOut(delay.getDelay()) * delayDecay;
-  delay.tick(out);
-  return out;
 }
 
 bool setup(BelaContext *context, void *userData) {
@@ -118,13 +111,13 @@ bool setup(BelaContext *context, void *userData) {
   }
   lfo.setup(context->audioSampleRate, lfoFreq);
   lowPassFilter.setBiquad(bq_type_lowpass,
-                          lowPassFilterFc / context->audioSampleRate, biquadQFactor, biquadPeakGain);
-  
+                          lowPassFilterFc / context->audioSampleRate,
+                          biquadQFactor, biquadPeakGain);
+
   reverb.set_delay_times(reverbDelayLength);
   reverb.set_feedback(reverbFeedback);
-
-  delay.setMaximumDelay(context->audioSampleRate * delayLength);
-  delay.setDelay(context->audioSampleRate * delayLength);
+  combFilterFeedback = new CombFilterFeedback(
+      context->audioSampleRate, delayLength, delayLength, delayDecay);
 
   if (context->analogFrames) {
     gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
@@ -150,10 +143,9 @@ void render(BelaContext *context, void *userData) {
       setEnvelopeGate(&envelopes[i], sensorValue[i]);
       sample += envelopes[i].process() * oscillators[i].process();
     }
-    sample /= 8;
-    float out = volume * reverb.tick(delayFeedbackTick(
-                             lowPassFilter.process(sample) +
-                             audioInputGain * audioRead(context, n, 0)));
+    float mix = lowPassFilter.process(sample / 8) +
+                audioInputGain * audioRead(context, n, 0);
+    float out = volume * reverb.tick(combFilterFeedback->process(mix));
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, out);
     }
