@@ -3,7 +3,6 @@
 #include "dsp/Oscillator.h"
 #include <Bela.h>
 
-#include <cmath>
 #include <vector>
 
 #include "I2C_MPR121/I2C_MPR121.h"
@@ -141,9 +140,12 @@ void render(BelaContext *context, void *userData) {
 
     for (unsigned i : activePins) {
       setEnvelopeGate(&envelopes[i], sensorValue[i]);
+      if(sensorValue[i] < 0.01 && envelopes[i].getState() == envState::env_idle) {
+        continue;
+      }
       sample += envelopes[i].process() * oscillators[i].process();
     }
-    float mix = lowPassFilter.process(sample / 8) +
+    float mix = lowPassFilter.process(sample / activePins.size()) +
                 audioInputGain * audioRead(context, n, 0);
     float out = volume * reverb.process(combFilterFeedback->process(mix));
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {

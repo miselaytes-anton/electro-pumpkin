@@ -37,7 +37,7 @@ public:
     out /= 8;
 
     // sequence of all pass filters
-    for (int i = 0; i < 0; i++) {
+    for (int i = 0; i < 2; i++) {
       out = apf[i]->process(out);
     }
 
