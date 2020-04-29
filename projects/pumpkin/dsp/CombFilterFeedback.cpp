@@ -1,6 +1,5 @@
 #include "CombFilterFeedback.h"
 
-CombFilterFeedback::CombFilterFeedback(){};
 CombFilterFeedback::CombFilterFeedback(float fs, float delayLength,
                                        int long maxDelayLength,
                                        float feedback) {
@@ -14,8 +13,7 @@ float CombFilterFeedback::process(float inputSample,
   float out;
   _delay.process(
       inputSample, [&](float delayedSample, float inputSample) -> float {
-        out = (inputSample - processDelayedSignal(delayedSample) * _feedback) *
-              0.5;
+        out = (inputSample - processDelayedSignal(delayedSample) * _feedback);
         return out;
       });
   return out;

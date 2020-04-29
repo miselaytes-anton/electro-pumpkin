@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "I2C_MPR121/I2C_MPR121.h"
-#include "_Freeverb/Freeverb.h"
+#include "dsp/Freeverb.h"
 #include "dsp/Biquad.h"
 #include "dsp/OscillatorHarmonics.h"
 
@@ -114,8 +114,8 @@ bool setup(BelaContext *context, void *userData) {
                           lowPassFilterFc / context->audioSampleRate,
                           biquadQFactor, biquadPeakGain);
 
-  reverb.set_delay_times(reverbDelayLength);
-  reverb.set_feedback(reverbFeedback);
+  reverb.setDelayTimes(reverbDelayLength);
+  reverb.setFeedback(reverbFeedback);
   combFilterFeedback = new CombFilterFeedback(
       context->audioSampleRate, delayLength, delayLength, delayDecay);
 
@@ -145,7 +145,7 @@ void render(BelaContext *context, void *userData) {
     }
     float mix = lowPassFilter.process(sample / 8) +
                 audioInputGain * audioRead(context, n, 0);
-    float out = volume * reverb.tick(combFilterFeedback->process(mix));
+    float out = volume * reverb.process(combFilterFeedback->process(mix));
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, out);
     }

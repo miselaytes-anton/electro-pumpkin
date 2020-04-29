@@ -18,7 +18,7 @@ void AllPassFilter::setDelayLength(float delayLength) {
 }
 
 float AllPassFilter::process(float input) {
-  return _combFilterFeedforward.process(_combFilterFeedback.process(input)) * 2;
+  return _combFilterFeedforward.process(_combFilterFeedback.process(input));
 }
 
 AllPassFilter::~AllPassFilter() {}

@@ -37,11 +37,12 @@ float Freeverb::process(float in) {
       return lowpass[i]->process(delayedSample) * 0.5;
     });
   }
+  out /= 8;
 
   // sequence of all pass filters
   for (int i = 0; i < 4; i++) {
     out = apf[i]->process(out);
   }
 
-  return out * 2;
+  return out;
 }

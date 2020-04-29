@@ -1,5 +1,4 @@
 #include "Delay.h"
-#include <cmath>
 
 using namespace std;
 

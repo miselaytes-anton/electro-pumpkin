@@ -19,7 +19,6 @@ private:
   float _fs;
 
 public:
-  CombFilterFeedback();
   CombFilterFeedback(float fs = 41000, float delayLength = 1,
                      long maxDelayLength = 2, float feedback = 0);
   ~CombFilterFeedback();
