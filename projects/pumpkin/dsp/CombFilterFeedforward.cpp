@@ -6,12 +6,6 @@ CombFilterFeedforward::CombFilterFeedforward(float fs, float delayLength, long m
   _feedback = feedback;
 }
 
-float CombFilterFeedforward::process(float input) {
-  float previousValue = _delay.process(input);
-
-  return (input * _feedback + previousValue);
-}
-
 void CombFilterFeedforward::setDelayLength(float delayLength) {
   _delay.setDelayLength(delayLength);
 }

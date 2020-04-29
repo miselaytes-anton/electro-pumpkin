@@ -8,12 +8,4 @@ Flanger::Flanger(float fs, float avgDelayLength, float lfoFreq, float depth) {
   _lfo = Oscillator(fs, lfoFreq);
 }
 
-float Flanger::process(float input) {
-  float maxDelaySwing = 1;
-  float newDelayLength = _avgDelayLength * (1 + maxDelaySwing * _lfo.process());
-  _combFilter.setDelayLength(newDelayLength);
-
-  return _combFilter.process(input);
-}
-
 Flanger::~Flanger() {}

@@ -27,22 +27,3 @@ Freeverb::Freeverb(float fs, float delayFactor, float feedback) {
     apf[i] = new AllPassFilter(_fs, allpassTimes[i], feedback);
   }
 }
-
-float Freeverb::process(float in) {
-  float out = 0.0f;
-
-  // comb filters in parallel
-  for (int i = 0; i < 8; i++) {
-    out += fbcf[i]->process(in, [&](float delayedSample) -> float {
-      return lowpass[i]->process(delayedSample) * 0.5;
-    });
-  }
-  out /= 8;
-
-  // sequence of all pass filters
-  for (int i = 0; i < 4; i++) {
-    out = apf[i]->process(out);
-  }
-
-  return out;
-}

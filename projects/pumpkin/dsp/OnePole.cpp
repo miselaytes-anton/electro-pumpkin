@@ -44,8 +44,6 @@ void OnePole::setType(int type) {
   }
 }
 
-float OnePole::process(float input) { return ym1 = input * a0 + ym1 * b1; }
-
 OnePole::~OnePole() { cleanup(); }
 
 void OnePole::cleanup() {}

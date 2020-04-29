@@ -3,13 +3,10 @@
 
 #include "Delay.h"
 
-template <typename T>
-class Identity {
+template <typename T> class Identity {
 public:
-    Identity() {}
-    T operator () (T value) const {
-        return value;
-    }
+  Identity() {}
+  T operator()(T value) const { return value; }
 };
 
 class CombFilterFeedback {
@@ -24,7 +21,15 @@ public:
   ~CombFilterFeedback();
   void setDelayLength(float delayLength);
   void setFeedback(float feedback);
-  float process(float input,
-                function<float(float delayedSample)> processDelayedSignal =
-                    Identity<float>());
+  inline float process(float inputSample,
+                       function<float(float delayedSample)>
+                           processDelayedSignal = Identity<float>()) {
+    float out;
+    _delay.process(
+        inputSample, [&](float delayedSample, float inputSample) -> float {
+          out = (inputSample - processDelayedSignal(delayedSample) * _feedback);
+          return out;
+        });
+    return out;
+  };
 };

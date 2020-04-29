@@ -25,5 +25,22 @@ public:
   void setFeedback(float val);
   Freeverb(float fs = 41000.0f, float delayFactor = 5.0f,
            float feedback = 0.5f);
-  float process(float in);
+  inline float process(float in) {
+    float out = 0.0f;
+
+    // comb filters in parallel
+    for (int i = 0; i < 8; i++) {
+      out += fbcf[i]->process(in, [&](float delayedSample) -> float {
+        return lowpass[i]->process(delayedSample) * 0.5;
+      });
+    }
+    out /= 8;
+
+    // sequence of all pass filters
+    for (int i = 0; i < 0; i++) {
+      out = apf[i]->process(out);
+    }
+
+    return out;
+  };
 };

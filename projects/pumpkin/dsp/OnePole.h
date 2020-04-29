@@ -31,5 +31,7 @@ public:
 
   void setFilter(float fs, float fc, int type);
 
-  float process(float input);
+  inline float process(float input){
+    return ym1 = input * a0 + ym1 * b1;
+  };
 };

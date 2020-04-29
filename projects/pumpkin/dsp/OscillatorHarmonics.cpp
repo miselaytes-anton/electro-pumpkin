@@ -30,11 +30,3 @@ void OscillatorHarmonics::setup(float frequency, float fs, unsigned type,
     oscillators[i] = Oscillator{fs, harmonicF, type};
   }
 }
-
-float OscillatorHarmonics::process() {
-  float out = 0;
-  for (unsigned i = 0; i < numHarmonics_; i++) {
-    out += oscillators[i].process() / float(pow(2, i + 1));
-  }
-  return out;
-}

@@ -8,17 +8,6 @@ CombFilterFeedback::CombFilterFeedback(float fs, float delayLength,
   _feedback = feedback;
 }
 
-float CombFilterFeedback::process(float inputSample,
-                                  function<float(float)> processDelayedSignal) {
-  float out;
-  _delay.process(
-      inputSample, [&](float delayedSample, float inputSample) -> float {
-        out = (inputSample - processDelayedSignal(delayedSample) * _feedback);
-        return out;
-      });
-  return out;
-}
-
 void CombFilterFeedback::setDelayLength(float delayLength) {
   _delay.setDelayLength(delayLength);
 }
