@@ -6,8 +6,8 @@
 #include <vector>
 
 #include "I2C_MPR121/I2C_MPR121.h"
-#include "dsp/Freeverb.h"
 #include "dsp/Biquad.h"
+#include "dsp/Freeverb.h"
 #include "dsp/OscillatorHarmonics.h"
 
 #define NUM_TOUCH_PINS 12
@@ -45,7 +45,6 @@ float lowPassFilterFc = 0;
 float lfoFreq = 0.5;
 float lfoDepth = 50;
 float lowPassRangeBottom = 200;
-float lowPassRangeTop = 2500;
 float volume = 0.7;
 // 12 notes of a C major scale
 const vector<float> gFrequencies = {261.63, 293.66, 329.63, 349.23,
@@ -79,10 +78,8 @@ void setEnvelopeGate(ADSR *envelope, float amplitude) {
   }
 }
 
-float getLowPassFilterFc(BelaContext *context, int analogFrameIndex) {
-  float value = map(analogRead(context, analogFrameIndex, 0), 0, 1,
-                    lowPassRangeBottom, lowPassRangeTop);
-  return (value + lfo.process() * lfoDepth);
+float getLowPassFilterFc() {
+  return (lowPassRangeBottom + lfo.process() * lfoDepth);
 }
 
 bool setup(BelaContext *context, void *userData) {
@@ -132,21 +129,22 @@ void render(BelaContext *context, void *userData) {
       readCount = 0;
       Bela_scheduleAuxiliaryTask(i2cTask);
     }
-    lowPassFilterFc =
-        getLowPassFilterFc(context, n / gAudioFramesPerAnalogFrame);
+    lowPassFilterFc = getLowPassFilterFc();
     lowPassFilter.setFc(lowPassFilterFc / context->audioSampleRate);
 
     float sample = 0.0;
 
     for (unsigned i : activePins) {
       setEnvelopeGate(&envelopes[i], sensorValue[i]);
-      if(sensorValue[i] < 0.01 && envelopes[i].getState() == envState::env_idle) {
+      if (sensorValue[i] < 0.01 &&
+          envelopes[i].getState() == envState::env_idle) {
         continue;
       }
       sample += envelopes[i].process() * oscillators[i].process();
     }
     sample /= activePins.size();
-    float mix = lowPassFilter.process(sample) + audioInputGain * audioRead(context, n, 0);
+    float mix = lowPassFilter.process(sample) +
+                audioInputGain * audioRead(context, n, 0);
     float out = volume * reverb.process(combFilterFeedback->process(mix));
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, out);
