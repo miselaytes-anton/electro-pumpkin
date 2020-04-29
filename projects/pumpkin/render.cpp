@@ -55,7 +55,7 @@ const vector<float> gFrequencies = {261.63, 293.66, 329.63, 349.23,
 /**
  * MPR 121 parameters
  **/
-const vector<int> activePins = {0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11};
+const vector<int> activePins = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 int readInterval = 50; // how often the MPR121 is read (in Hz)
 float sensorValue[NUM_TOUCH_PINS];
 int readCount = 0;           // How long until we read again...
@@ -145,8 +145,8 @@ void render(BelaContext *context, void *userData) {
       }
       sample += envelopes[i].process() * oscillators[i].process();
     }
-    float mix = lowPassFilter.process(sample / activePins.size()) +
-                audioInputGain * audioRead(context, n, 0);
+    sample /= activePins.size();
+    float mix = lowPassFilter.process(sample) + audioInputGain * audioRead(context, n, 0);
     float out = volume * reverb.process(combFilterFeedback->process(mix));
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, out);
