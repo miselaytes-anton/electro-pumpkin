@@ -7,7 +7,6 @@
 
 #include "I2C_MPR121/I2C_MPR121.h"
 #include "dsp/Biquad.h"
-#include "dsp/Freeverb.h"
 #include "dsp/OscillatorHarmonics.h"
 
 #define NUM_TOUCH_PINS 12
@@ -22,7 +21,6 @@ vector<OscillatorHarmonics> oscillators;
 vector<ADSR> envelopes;
 Biquad lowPassFilter;
 Oscillator lfo;
-Freeverb reverb;
 
 I2C_MPR121 mpr121;     // Object to handle MPR121 sensing
 AuxiliaryTask i2cTask; // Auxiliary task to read I2C
@@ -30,13 +28,11 @@ AuxiliaryTask i2cTask; // Auxiliary task to read I2C
 /**
  * Audio parameters
  **/
-float reverbDelayLength = 1;
-float reverbFeedback = 0.2;
 float biquadQFactor = 0.707;
 float biquadPeakGain = 1;
 float delayLength = 2;
-float delayDecay = 0.75f;
-float audioInputGain = 0.2f;
+float delayDecay = 0.97f;
+float audioInputGain = 0.4f;
 float gAttack = 0.1;  // Envelope attack (seconds)
 float gDecay = 0.25;  // Envelope decay (seconds)
 float gRelease = 3.0; // Envelope release (seconds)
@@ -62,7 +58,7 @@ int readIntervalSamples = 0; // How many samples between reads
 
 void readMPR121(void *) {
   float normalizeFactor = 400.f; // ensure we get values from 0 to 1
-  int touchThreshold = 5;        //  minimum amount of touch for trigger
+  int touchThreshold = 3;        //  minimum amount of touch for trigger
   for (unsigned i : activePins) {
     sensorValue[i] = mpr121.getSensorValue(i, touchThreshold) / normalizeFactor;
   }
@@ -93,8 +89,8 @@ bool setup(BelaContext *context, void *userData) {
 
   for (unsigned i : activePins) {
     OscillatorHarmonics oscillator{
-        gFrequencies[i] / 2, context->audioSampleRate, Oscillator::sawtooth, 1,
-        OscillatorHarmonics::even};
+        gFrequencies[i] / 2, context->audioSampleRate, Oscillator::sawtooth, 2,
+        OscillatorHarmonics::uneven};
     oscillators.push_back(oscillator);
 
     // Set ADSR parameters
@@ -108,10 +104,8 @@ bool setup(BelaContext *context, void *userData) {
   lfo.setup(context->audioSampleRate, lfoFreq);
   lowPassFilter.setBiquad(bq_type_lowpass,
                           lowPassFilterFc / context->audioSampleRate,
-                          biquadQFactor, biquadPeakGain);
+                          biquadQFactor, biquadPeakGain);                       
 
-  reverb.setDelayTimes(reverbDelayLength);
-  reverb.setFeedback(reverbFeedback);
   combFilterFeedback = new CombFilterFeedback(
       context->audioSampleRate, delayLength, delayLength, delayDecay);
 
@@ -145,7 +139,7 @@ void render(BelaContext *context, void *userData) {
     sample /= activePins.size();
     float mix = lowPassFilter.process(sample) +
                 audioInputGain * audioRead(context, n, 0);
-    float out = volume * reverb.process(combFilterFeedback->process(mix));
+    float out = volume * combFilterFeedback->process(mix);
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, out);
     }
