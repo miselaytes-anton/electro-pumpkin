@@ -3,23 +3,22 @@
 #include "dsp/Oscillator.h"
 #include <Bela.h>
 
-#include <vector>
-
 #include "I2C_MPR121/I2C_MPR121.h"
 #include "dsp/Biquad.h"
 #include "dsp/OscillatorHarmonics.h"
+#include <cmath>
+#include <vector>
 
 #define NUM_TOUCH_PINS 12
 
 using namespace std;
-
 int gAudioFramesPerAnalogFrame = 0;
-int sampleRate = 41000;
 
 CombFilterFeedback *combFilterFeedback;
 vector<OscillatorHarmonics> oscillators;
 vector<ADSR> envelopes;
 Biquad lowPassFilter;
+Biquad delayLowPassFilter;
 Oscillator lfo;
 
 I2C_MPR121 mpr121;     // Object to handle MPR121 sensing
@@ -31,6 +30,7 @@ AuxiliaryTask i2cTask; // Auxiliary task to read I2C
 float biquadQFactor = 0.707;
 float biquadPeakGain = 1;
 float delayLength = 2;
+float delayLowPassFilterFc = 1700;
 float delayDecay = 0.97f;
 float audioInputGain = 0.4f;
 float gAttack = 0.1;  // Envelope attack (seconds)
@@ -101,14 +101,17 @@ bool setup(BelaContext *context, void *userData) {
     envelope.setSustainLevel(gSustain);
     envelopes.push_back(envelope);
   }
+
   lfo.setup(context->audioSampleRate, lfoFreq);
   lowPassFilter.setBiquad(bq_type_lowpass,
                           lowPassFilterFc / context->audioSampleRate,
-                          biquadQFactor, biquadPeakGain);                       
+                          biquadQFactor, biquadPeakGain);
+  delayLowPassFilter.setBiquad(bq_type_lowpass,
+                               delayLowPassFilterFc / context->audioSampleRate,
+                               biquadQFactor, biquadPeakGain);
 
   combFilterFeedback = new CombFilterFeedback(
-      context->audioSampleRate, delayLength, delayLength, delayDecay);
-
+      context->audioSampleRate, delayLength, delayLength * 4, delayDecay);
   if (context->analogFrames) {
     gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
   }
@@ -116,15 +119,42 @@ bool setup(BelaContext *context, void *userData) {
   return true;
 }
 
+void setDelayParams(BelaContext *context, int analogFrame) {
+  int delayLengthChanel = 0;
+  int delayDecayChanel = 1;
+  float sensitivity = 0.2;
+  float minimumDelayLength = 0.012;
+
+  float newDelayLength =
+      map(analogRead(context, analogFrame, delayLengthChanel), 0, 1, 0.01, 2.2);
+
+  if (abs(newDelayLength - delayLength) >= sensitivity) {
+    delayLength = newDelayLength;
+    combFilterFeedback->setDelayLength(newDelayLength);
+  } else if (newDelayLength < sensitivity && delayLength >= sensitivity) {
+    delayLength = minimumDelayLength;
+    combFilterFeedback->setDelayLength(minimumDelayLength);
+  }
+
+  delayDecay =
+      map(analogRead(context, analogFrame, delayDecayChanel), 0, 1, 0.1, 0.98);
+
+  combFilterFeedback->setFeedback(delayDecay);
+}
+
 void render(BelaContext *context, void *userData) {
   for (unsigned n = 0; n < context->audioFrames; n++) {
-    // schedule touch sensor readings
     if (++readCount >= readIntervalSamples) {
+      // schedule touch sensor readings
       readCount = 0;
       Bela_scheduleAuxiliaryTask(i2cTask);
     }
     lowPassFilterFc = getLowPassFilterFc();
     lowPassFilter.setFc(lowPassFilterFc / context->audioSampleRate);
+    if (!(n % gAudioFramesPerAnalogFrame)) {
+      setDelayParams(context, n / gAudioFramesPerAnalogFrame);
+      volume = analogRead(context, n / gAudioFramesPerAnalogFrame, 2);
+    }
 
     float sample = 0.0;
 
@@ -139,7 +169,10 @@ void render(BelaContext *context, void *userData) {
     sample /= activePins.size();
     float mix = lowPassFilter.process(sample) +
                 audioInputGain * audioRead(context, n, 0);
-    float out = volume * combFilterFeedback->process(mix);
+    float out = volume * combFilterFeedback->process(
+                             mix, [](float delayedSample) -> float {
+                               return delayLowPassFilter.process(delayedSample);
+                             });
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, out);
     }
