@@ -22,9 +22,6 @@ vector<ADSR> envelopes;
 Biquad lowPassFilter;
 Oscillator lfo;
 
-I2C_MPR121 mpr121;     // Object to handle MPR121 sensing
-AuxiliaryTask i2cTask; // Auxiliary task to read I2C
-
 /**
  * Audio parameters
  **/
@@ -50,6 +47,10 @@ const vector<float> gFrequencies = {261.63, 293.66, 329.63, 349.23,
 /**
  * MPR 121 parameters
  **/
+
+I2C_MPR121 mpr121;     // Object to handle MPR121 sensing
+AuxiliaryTask i2cTask; // Auxiliary task to read I2C
+
 const vector<int> activePins = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 int readInterval = 50; // how often the MPR121 is read (in Hz)
 float sensorValue[NUM_TOUCH_PINS];
@@ -72,6 +73,25 @@ void setEnvelopeGate(ADSR *envelope, float amplitude) {
   } else if (amplitude == 0 && envState != envState::env_idle) {
     envelope->gate(false);
   }
+}
+
+void setDelayParams(BelaContext *context, int analogFrame) {
+  int delayLengthChanel = 0;
+  int delayDecayChanel = 1;
+  float sensitivity = 0.2;
+
+  float newDelayLength =
+      map(analogRead(context, analogFrame, delayLengthChanel), 0, 1, 0.01, 4.2);
+
+  if (abs(newDelayLength - delayLength) >= sensitivity) {
+    delayLength = newDelayLength;
+    combFilterFeedback->setDelayLength(newDelayLength);
+  }
+
+  delayDecay =
+      map(analogRead(context, analogFrame, delayDecayChanel), 0, 1, 0.1, 0.98);
+
+  combFilterFeedback->setFeedback(delayDecay);
 }
 
 float getLowPassFilterFc() {
@@ -120,25 +140,6 @@ bool setup(BelaContext *context, void *userData) {
                                               delayLength, 5, delayDecay);
 
   return true;
-}
-
-void setDelayParams(BelaContext *context, int analogFrame) {
-  int delayLengthChanel = 0;
-  int delayDecayChanel = 1;
-  float sensitivity = 0.2;
-
-  float newDelayLength =
-      map(analogRead(context, analogFrame, delayLengthChanel), 0, 1, 0.01, 4.2);
-
-  if (abs(newDelayLength - delayLength) >= sensitivity) {
-    delayLength = newDelayLength;
-    combFilterFeedback->setDelayLength(newDelayLength);
-  }
-
-  delayDecay =
-      map(analogRead(context, analogFrame, delayDecayChanel), 0, 1, 0.1, 0.98);
-
-  combFilterFeedback->setFeedback(delayDecay);
 }
 
 void render(BelaContext *context, void *userData) {
