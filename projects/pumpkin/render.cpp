@@ -8,7 +8,6 @@
 #include "dsp/CombFilterFeedback.h"
 #include "dsp/Drum.h"
 #include "dsp/Oscillator.h"
-#include "dsp/OscillatorHarmonics.h"
 #include "dsp/Smooth.cpp"
 #include <stk/JCRev.h>
 
