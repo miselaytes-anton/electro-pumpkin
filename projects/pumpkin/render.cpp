@@ -9,6 +9,7 @@
 #include "dsp/Drum.h"
 #include "dsp/Oscillator.h"
 #include "dsp/OscillatorHarmonics.h"
+#include "dsp/Smooth.cpp"
 
 #define NUM_TOUCH_PINS 12
 
@@ -21,6 +22,9 @@ vector<Drum> drums;
 vector<ADSR> envelopes;
 Biquad lowPassFilter;
 Oscillator lfo;
+Smooth smoothVolume;
+Smooth smoothDelayLength;
+Smooth smoothDelayDecay;
 
 /**
  * Audio parameters
@@ -78,11 +82,11 @@ void setEnvelopeGate(ADSR *envelope, float amplitude) {
 void setDelayParams(BelaContext *context, int analogFrame) {
   int delayLengthChanel = 0;
   int delayDecayChanel = 1;
-  float sensitivity = 0.2;
+  float sensitivity = 1;
 
-  float newDelayLength =
-      map(analogRead(context, analogFrame, delayLengthChanel), 0, 1, 0.2, 10);
-
+  float newDelayLength = map(smoothDelayLength.process(analogRead(
+                                 context, analogFrame, delayLengthChanel)),
+                             0, 1, 0.2, 10);
   if (abs(newDelayLength - delayLength) >= sensitivity) {
     delayLength = newDelayLength;
     combFilterFeedback->setDelayLength(newDelayLength);
@@ -91,7 +95,7 @@ void setDelayParams(BelaContext *context, int analogFrame) {
   delayDecay =
       map(analogRead(context, analogFrame, delayDecayChanel), 0, 1, 0.1, 0.98);
 
-  combFilterFeedback->setFeedback(delayDecay);
+  combFilterFeedback->setFeedback(smoothDelayDecay.process(delayDecay));
 }
 
 float getLowPassFilterFc() {
@@ -155,7 +159,8 @@ void render(BelaContext *context, void *userData) {
     lowPassFilter.setFc(lowPassFilterFc / context->audioSampleRate);
     if (!(n % gAudioFramesPerAnalogFrame)) {
       setDelayParams(context, n / gAudioFramesPerAnalogFrame);
-      volume = analogRead(context, n / gAudioFramesPerAnalogFrame, 2);
+      volume = smoothVolume.process(
+          analogRead(context, n / gAudioFramesPerAnalogFrame, 2));
     }
 
     // drum processing
