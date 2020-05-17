@@ -42,7 +42,7 @@ float gSustain = 1.0; // Envelope sustain level
 float lowPassFilterFc = 0;
 float lfoFreq = 0.5;
 float lfoDepth = 50;
-float lowPassRangeBottom = 200;
+float lowPassRangeBottom = 400;
 float volume = 0.7;
 // 12 notes of a C major scale
 const vector<float> gFrequencies = {261.63, 293.66, 329.63, 349.23,
