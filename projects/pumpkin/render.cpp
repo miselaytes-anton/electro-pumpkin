@@ -81,7 +81,7 @@ void setDelayParams(BelaContext *context, int analogFrame) {
   float sensitivity = 0.2;
 
   float newDelayLength =
-      map(analogRead(context, analogFrame, delayLengthChanel), 0, 1, 0.01, 4.2);
+      map(analogRead(context, analogFrame, delayLengthChanel), 0, 1, 0.2, 10);
 
   if (abs(newDelayLength - delayLength) >= sensitivity) {
     delayLength = newDelayLength;
@@ -137,7 +137,7 @@ bool setup(BelaContext *context, void *userData) {
                           lowPassFilterFc / context->audioSampleRate,
                           biquadQFactor, biquadPeakGain);
   combFilterFeedback = new CombFilterFeedback(context->audioSampleRate,
-                                              delayLength, 5, delayDecay);
+                                              delayLength, 12, delayDecay);
 
   return true;
 }
