@@ -123,7 +123,7 @@ bool setup(BelaContext *context, void *userData) {
     Oscillator oscillator{context->audioSampleRate, gFrequencies[i] / 2,
                           Oscillator::sawtooth};
     oscillators.push_back(oscillator);
-    Oscillator harmonic{context->audioSampleRate, gFrequencies[i] / 2 / 3,
+    Oscillator harmonic{context->audioSampleRate, gFrequencies[i] / 2 * 3,
                         Oscillator::sawtooth};
     harmonics.push_back(harmonic);
 
