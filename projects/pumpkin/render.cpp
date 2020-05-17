@@ -10,10 +10,12 @@
 #include "dsp/Oscillator.h"
 #include "dsp/OscillatorHarmonics.h"
 #include "dsp/Smooth.cpp"
+#include <stk/JCRev.h>
 
 #define NUM_TOUCH_PINS 12
 
 using namespace std;
+using namespace stk;
 int gAudioFramesPerAnalogFrame = 0;
 
 CombFilterFeedback *combFilterFeedback;
@@ -26,6 +28,7 @@ Oscillator lfo;
 Smooth smoothVolume;
 Smooth smoothDelayLength;
 Smooth smoothDelayDecay;
+JCRev reverb;
 
 /**
  * Audio parameters
@@ -145,6 +148,7 @@ bool setup(BelaContext *context, void *userData) {
                           biquadQFactor, biquadPeakGain);
   combFilterFeedback = new CombFilterFeedback(context->audioSampleRate,
                                               delayLength, 12, delayDecay);
+  reverb = JCRev(0.2);
 
   return true;
 }
@@ -191,7 +195,7 @@ void render(BelaContext *context, void *userData) {
 
     // mixing and out
     float mix = melodySample / 6 + drumSample;
-    mix = volume * combFilterFeedback->process(mix);
+    mix = volume * combFilterFeedback->process(reverb.tick(mix));
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, mix);
     }
