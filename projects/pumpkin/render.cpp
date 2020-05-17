@@ -17,7 +17,8 @@ using namespace std;
 int gAudioFramesPerAnalogFrame = 0;
 
 CombFilterFeedback *combFilterFeedback;
-vector<OscillatorHarmonics> oscillators;
+vector<Oscillator> oscillators;
+vector<Oscillator> harmonics;
 vector<Drum> drums;
 vector<ADSR> envelopes;
 Biquad lowPassFilter;
@@ -117,10 +118,12 @@ bool setup(BelaContext *context, void *userData) {
 
   for (unsigned i : activePins) {
     // Melody
-    OscillatorHarmonics oscillator{
-        gFrequencies[i] / 2, context->audioSampleRate, Oscillator::sawtooth, 2,
-        OscillatorHarmonics::uneven};
+    Oscillator oscillator{context->audioSampleRate, gFrequencies[i] / 2,
+                          Oscillator::sawtooth};
     oscillators.push_back(oscillator);
+    Oscillator harmonic{context->audioSampleRate, gFrequencies[i] / 2 / 3,
+                        Oscillator::sawtooth};
+    harmonics.push_back(harmonic);
 
     // Envelopes
     ADSR envelope;
@@ -181,7 +184,8 @@ void render(BelaContext *context, void *userData) {
           envelopes[i].getState() == envState::env_idle) {
         continue;
       }
-      melodySample += envelopes[i].process() * oscillators[i].process();
+      melodySample += envelopes[i].process() *
+                      (oscillators[i].process() + harmonics[i].process() / 4);
     }
     melodySample = lowPassFilter.process(melodySample);
 
