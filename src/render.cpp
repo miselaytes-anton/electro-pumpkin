@@ -1,6 +1,7 @@
-#include <Bela.h>
 #include <cmath>
 #include <vector>
+
+#include <Bela.h>
 
 #include "I2C_MPR121/I2C_MPR121.h"
 #include "dsp/ADSR.h"
@@ -15,16 +16,17 @@
 
 using namespace std;
 using namespace stk;
+
 int gAudioFramesPerAnalogFrame = 0;
 
-CombFilterFeedback *combFilterFeedback;
+CombFilterFeedback combFilterFeedback;
 vector<Oscillator> oscillators;
 vector<Oscillator> harmonics;
-vector<Drum> drums;
+Drum drum;
 vector<ADSR> envelopes;
 Biquad lowPassFilter;
 Oscillator lfo;
-Smooth smoothVolume;
+Smooth smoothDrumFrequency;
 Smooth smoothDelayLength;
 Smooth smoothDelayDecay;
 JCRev reverb;
@@ -45,7 +47,7 @@ float lowPassFilterFc = 0;
 float lfoFreq = 0.5;
 float lfoDepth = 50;
 float lowPassRangeBottom = 400;
-float volume = 0.7;
+float volume = 0.5;
 // 12 notes of a C major scale
 const vector<float> gFrequencies = {261.63, 293.66, 329.63, 349.23,
                                     392.00, 440.00, 493.88, 523.25,
@@ -92,17 +94,27 @@ void setDelayParams(BelaContext *context, int analogFrame) {
                              0, 1, 0.2, 10);
   if (abs(newDelayLength - delayLength) >= sensitivity) {
     delayLength = newDelayLength;
-    combFilterFeedback->setDelayLength(newDelayLength);
+    combFilterFeedback.setDelayLength(newDelayLength);
   }
 
   delayDecay =
       map(analogRead(context, analogFrame, delayDecayChanel), 0, 1, 0.1, 0.98);
 
-  combFilterFeedback->setFeedback(smoothDelayDecay.process(delayDecay));
+  combFilterFeedback.setFeedback(smoothDelayDecay.process(delayDecay));
 }
 
-float getLowPassFilterFc() {
-  return (lowPassRangeBottom + lfo.process() * lfoDepth);
+void setDrumFrequency(BelaContext *context, int analogFrame) {
+  float drumFrequencyChannel = 2;
+  float value = smoothDrumFrequency.process(
+      analogRead(context, analogFrame, drumFrequencyChannel));
+  float drumFrequency =
+      map(value, 0, 1, gFrequencies[0] / 2, gFrequencies[11] / 2);
+  drum.setFrequency(drumFrequency);
+}
+
+void setLowPassFilterFc(BelaContext *context) {
+  float lowPassFilterFc = (lowPassRangeBottom + lfo.process() * lfoDepth);
+  lowPassFilter.setFc(lowPassFilterFc / context->audioSampleRate);
 }
 
 bool setup(BelaContext *context, void *userData) {
@@ -134,25 +146,32 @@ bool setup(BelaContext *context, void *userData) {
     envelope.setReleaseRate(gRelease * context->audioSampleRate);
     envelope.setSustainLevel(gSustain);
     envelopes.push_back(envelope);
-
-    // Drums
-    Drum drum{context->audioSampleRate, gFrequencies[i] / 2};
-    drums.push_back(drum);
   }
+  // Drum
+  drum = Drum(context->audioSampleRate, gFrequencies[0] / 2);
 
   // Effects
   lfo.setup(context->audioSampleRate, lfoFreq);
   lowPassFilter.setBiquad(bq_type_lowpass,
                           lowPassFilterFc / context->audioSampleRate,
                           biquadQFactor, biquadPeakGain);
-  combFilterFeedback = new CombFilterFeedback(context->audioSampleRate,
-                                              delayLength, 12, delayDecay);
+  combFilterFeedback =
+      CombFilterFeedback(context->audioSampleRate, delayLength, 12, delayDecay);
   reverb = JCRev(0.2);
 
   return true;
 }
 
+float skipSecondsFromStart = 1;
+float sampleCounter = 0;
+
 void render(BelaContext *context, void *userData) {
+  if (sampleCounter++ <
+      skipSecondsFromStart * context->audioSampleRate / context->audioFrames) {
+    // On start mic produces a click which we do not want in the loop
+    return;
+  }
+
   for (unsigned n = 0; n < context->audioFrames; n++) {
     // schedule touch sensor readings
     if (++readCount >= readIntervalSamples) {
@@ -161,23 +180,15 @@ void render(BelaContext *context, void *userData) {
     }
 
     // update parameter values
-    lowPassFilterFc = getLowPassFilterFc();
-    lowPassFilter.setFc(lowPassFilterFc / context->audioSampleRate);
+    setLowPassFilterFc(context);
     if (!(n % gAudioFramesPerAnalogFrame)) {
       setDelayParams(context, n / gAudioFramesPerAnalogFrame);
-      volume = smoothVolume.process(
-          analogRead(context, n / gAudioFramesPerAnalogFrame, 2));
+      setDrumFrequency(context, n / gAudioFramesPerAnalogFrame);
     }
 
     // drum processing
-    float drumSample = 0.0;
     float micInput = audioRead(context, n, 0);
-    for (unsigned i : activePins) {
-      if (sensorValue[i] < 0.01) {
-        continue;
-      }
-      drumSample += drums[i].process(micInput);
-    }
+    float drumSample = drum.process(micInput);
 
     // melody processing
     float melodySample = 0.0;
@@ -193,8 +204,8 @@ void render(BelaContext *context, void *userData) {
     melodySample = lowPassFilter.process(melodySample);
 
     // mixing and out
-    float mix = melodySample / 6 + drumSample;
-    mix = volume * combFilterFeedback->process(reverb.tick(mix));
+    float mix = melodySample / 12 + drumSample;
+    mix = volume * combFilterFeedback.process(reverb.tick(mix));
     for (unsigned ch = 0; ch < context->audioInChannels; ch++) {
       audioWrite(context, n, ch, mix);
     }

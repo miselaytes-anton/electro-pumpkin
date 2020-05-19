@@ -5,4 +5,10 @@ Drum::Drum(float fs, float frequency) {
   _lowpass = Biquad{bq_type_lowpass, 1700 / fs, 0.707, 1};
 }
 
+Drum::Drum() {}
+
 Drum::~Drum() {}
+
+void Drum::setFrequency(float frequency) {
+  _combFilter.setDelayLength(1 / frequency);
+}

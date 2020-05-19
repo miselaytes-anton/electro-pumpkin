@@ -12,7 +12,7 @@ I was looking for a suitable material and found that a lot of instruments can be
 
 ![audio flow](./assets/audio-flow.png)
 
-Audio flow has 2 main sources of sound. First, We have 12 notes of C major scale which can be triggered by touching some conductive paint inside the pumpkin. Each of the notes is 2 saw waves going through a low pass filter. Low pass filter is modulated by an LFO. I also use a standard ADSR envelope to make the sound a bit more realistic. Then the other source is just drumming or scratching on the pumpkin which is picked up by a contact microphone. These drum sounds are used as an input for [Karplus-Strong](https://en.wikipedia.org/wiki/Karplus%E2%80%93Strong_string_synthesis) tuned to a C major as well.
+Audio flow has 2 main sources of sound. First, We have 12 notes of C major scale which can be triggered by touching some conductive paint inside the pumpkin. Each of the notes is 2 saw waves going through a low pass filter. Low pass filter is modulated by an LFO. I also use a standard ADSR envelope to make the sound a bit more realistic. Then the other source is just drumming or scratching on the pumpkin which is picked up by a contact microphone. These drum sounds are used as an input for [Karplus-Strong](https://en.wikipedia.org/wiki/Karplus%E2%80%93Strong_string_synthesis).
 
 Finally the sounds are mixed and go through a delay, or more correctly through a feedback comb filter. The decay coefficient is about 0.95, meaning that delay will be repeating for a very long time, almost like a looper. So any sound you make will be repeating and repeating and repeating. This allows for making quite complex ambient like.. hmm.. Soundscapes I guess.
 
@@ -34,7 +34,7 @@ One of the more challenging parts was trying to fit the electronics in the pumpk
 Set `$BELA_FOLDER` first, and then:
 
 ```console
-"$BELA_FOLDER/scripts/build_project.sh" ./src --force -m 'LDLIBS=-lstk CPPFLAGS=-std=c++11'
+"$BELA_FOLDER/scripts/build_project.sh" ./src -p pumpkin --force -m 'LDLIBS=-lstk CPPFLAGS=-std=c++11'
 
 "$BELA_FOLDER/scripts/halt_board.sh"
 

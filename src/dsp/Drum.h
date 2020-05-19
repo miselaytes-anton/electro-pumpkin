@@ -9,6 +9,7 @@ private:
   Biquad _lowpass;
 
 public:
+  Drum();
   Drum(float fs, float frequency);
   ~Drum();
   inline float process(float input) {
@@ -16,4 +17,5 @@ public:
       return _lowpass.process(delayedSample);
     });
   };
+  void setFrequency(float frequency);
 };
