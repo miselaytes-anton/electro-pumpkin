@@ -1,6 +1,6 @@
 # Pumpkin
 
-Electro-acoustic musical instrument made out of pumpkin.
+Electroacoustic musical instrument made out of pumpkin.
 
 [![electric pumpkin video](./assets/electric-pimpkin-video.png)](https://www.youtube.com/watch?v=SlfIT_5dkmY&)
 
