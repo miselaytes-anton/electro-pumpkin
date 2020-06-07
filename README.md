@@ -2,6 +2,8 @@
 
 Electro-acoustic musical instrument made out of pumpkin.
 
+[![electric pumpkin video](./assets/electric-pimpkin-video.png)](https://www.youtube.com/watch?v=SlfIT_5dkmY&)
+
 ## But why?
 
 Some time ago I got an idea that I want to mae a musical instrument. However I am really not DAW user, do did not want to make a VST plugin. I really wanted something tangible. I also did not want to make a typical synth like interface with only knobs or buttons. I wanted something which can be played like an acoustic instrument but at the same time have digital audio capabilities.
